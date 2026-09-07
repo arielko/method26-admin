@@ -21,6 +21,16 @@ export async function createCollection(name: string): Promise<Collection> {
   return data as Collection;
 }
 
+// Used by the presign route to reject a collectionId that names nothing —
+// otherwise a session could mint signed PUT URLs under an arbitrary,
+// possibly non-existent, collection prefix.
+export async function collectionExists(id: string): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from('collections').select('id').eq('id', id).maybeSingle();
+  if (error) throw new Error(`collectionExists: ${error.message}`);
+  return data !== null;
+}
+
 export async function listFolders(collectionId: string): Promise<Folder[]> {
   const { data, error } = await createAdminClient()
     .from('folders').select('id,collection_id,name,is_retouched,sort_order')
@@ -29,12 +39,38 @@ export async function listFolders(collectionId: string): Promise<Folder[]> {
   return data as Folder[];
 }
 
+// Used by the photos route to derive collection_id from folder_id server
+// side, and to reject a folder_id that names nothing — see I-5.
+export async function getFolder(id: string): Promise<Folder | null> {
+  const { data, error } = await createAdminClient()
+    .from('folders').select('id,collection_id,name,is_retouched,sort_order')
+    .eq('id', id).maybeSingle();
+  if (error) throw new Error(`getFolder: ${error.message}`);
+  return data as Folder | null;
+}
+
+async function nextSortOrder(table: 'folders' | 'photos', collectionId: string): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from(table)
+    .select('sort_order')
+    .eq('collection_id', collectionId)
+    .order('sort_order', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`nextSortOrder(${table}): ${error.message}`);
+  return data.length > 0 ? (data[0] as { sort_order: number }).sort_order + 1 : 0;
+}
+
 export async function createFolder(
   collectionId: string, name: string, isRetouched: boolean
 ): Promise<Folder> {
+  // Every folder used to get sort_order 0 by omission, so a second folder
+  // collided with the first and the two-surface split's ordering became
+  // whatever Postgres felt like on a given page load. Computed here from
+  // the current maximum instead.
+  const sortOrder = await nextSortOrder('folders', collectionId);
   const { data, error } = await createAdminClient()
     .from('folders')
-    .insert({ collection_id: collectionId, name, is_retouched: isRetouched })
+    .insert({ collection_id: collectionId, name, is_retouched: isRetouched, sort_order: sortOrder })
     .select('id,collection_id,name,is_retouched,sort_order').single();
   if (error) throw new Error(`createFolder: ${error.message}`);
   return data as Folder;
@@ -56,9 +92,26 @@ export async function listPhotos(collectionId: string): Promise<Photo[]> {
   return data as Photo[];
 }
 
-export async function createPhotos(rows: NewPhoto[]): Promise<void> {
+// Each row is inserted the moment its own upload finishes (see
+// src/lib/gallery/upload.ts), so this is called once per photo in
+// practice, but still accepts a batch for flexibility. sort_order is
+// assigned here rather than by the caller — restarting at 0 on every
+// upload session made a second batch collide with the first, and Postgres
+// gives no guaranteed order among ties, so the sequence a client saw could
+// differ between two page loads.
+export async function createPhotos(rows: Omit<NewPhoto, 'sort_order'>[]): Promise<void> {
   if (rows.length === 0) return;
-  const { error } = await createAdminClient().from('photos').insert(rows);
+  const nextForCollection = new Map<string, number>();
+  const withOrder: NewPhoto[] = [];
+  for (const row of rows) {
+    let next = nextForCollection.get(row.collection_id);
+    if (next === undefined) {
+      next = await nextSortOrder('photos', row.collection_id);
+    }
+    withOrder.push({ ...row, sort_order: next });
+    nextForCollection.set(row.collection_id, next + 1);
+  }
+  const { error } = await createAdminClient().from('photos').insert(withOrder);
   if (error) throw new Error(`createPhotos: ${error.message}`);
 }
 
