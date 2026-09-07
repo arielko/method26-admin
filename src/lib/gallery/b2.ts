@@ -92,3 +92,71 @@ export async function signedPutUrl(key: string, contentType: string): Promise<st
 
   return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
+
+// Read counterpart to signedPutUrl above, for handing the admin UI a
+// short-lived URL to a thumbnail or preview it can display. Same
+// SigV4-over-Web-Crypto approach, GET instead of PUT, and only `host` is
+// signed — there's no request body/content-type on a GET to bind into the
+// signature. Deliberately not factored together with signedPutUrl: the two
+// canonical requests differ in verb and signed-header set, and folding them
+// into one function would trade "which verb is being signed" for a couple
+// fewer lines.
+export async function signedGetUrl(key: string, opts: { expiresIn?: number } = {}): Promise<string> {
+  const keyId = process.env.B2_KEY_ID;
+  const appKey = process.env.B2_APP_KEY;
+  const bucket = process.env.B2_BUCKET;
+  const region = process.env.B2_REGION;
+
+  // Fail closed: an unsigned URL would 403 at B2 and read as a broken
+  // image rather than a misconfigured server.
+  if (!keyId || !appKey || !bucket || !region) {
+    throw new Error('B2 is not configured: B2_KEY_ID, B2_APP_KEY, B2_BUCKET and B2_REGION are all required');
+  }
+
+  // Same ceiling as signedPutUrl — a read URL is still a standing grant
+  // while it's valid, and the admin only ever needs one long enough to
+  // load an <img>.
+  const expiresIn = Math.min(opts.expiresIn ?? EXPIRY_SECONDS, EXPIRY_SECONDS);
+
+  const host = `s3.${region}.backblazeb2.com`;
+  const canonicalUri = '/' + [bucket, ...key.split('/')].map(encodeSegment).join('/');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const dateStamp = stamp.slice(0, 8);
+
+  const params: Record<string, string> = {
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': `${keyId}/${dateStamp}/${region}/${SERVICE}/aws4_request`,
+    'X-Amz-Date': stamp,
+    'X-Amz-Expires': String(expiresIn),
+    'X-Amz-SignedHeaders': 'host',
+  };
+
+  const canonicalQuery = Object.keys(params)
+    .sort()
+    .map((k) => `${encodeSegment(k)}=${encodeSegment(params[k])}`)
+    .join('&');
+
+  const canonicalRequest = [
+    'GET',
+    canonicalUri,
+    canonicalQuery,
+    `host:${host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    stamp,
+    `${dateStamp}/${region}/${SERVICE}/aws4_request`,
+    await sha256Hex(canonicalRequest),
+  ].join('\n');
+
+  const kDate = await hmac(new TextEncoder().encode('AWS4' + appKey), dateStamp);
+  const kRegion = await hmac(kDate, region);
+  const kService = await hmac(kRegion, SERVICE);
+  const kSigning = await hmac(kService, 'aws4_request');
+  const signature = toHex(await hmac(kSigning, stringToSign));
+
+  return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+}

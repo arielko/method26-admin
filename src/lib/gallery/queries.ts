@@ -83,6 +83,19 @@ export async function updateFolder(
   if (error) throw new Error(`updateFolder: ${error.message}`);
 }
 
+// Used by the image route to resolve a photo to a derivative key. Selects
+// only thumbnail_key and preview_key — original_key is never fetched here,
+// so this route has no data in hand it could leak into a signed URL for
+// full-resolution bytes.
+export async function getPhotoForImage(
+  id: string
+): Promise<Pick<Photo, 'id' | 'thumbnail_key' | 'preview_key'> | null> {
+  const { data, error } = await createAdminClient()
+    .from('photos').select('id,thumbnail_key,preview_key').eq('id', id).maybeSingle();
+  if (error) throw new Error(`getPhotoForImage: ${error.message}`);
+  return data as Pick<Photo, 'id' | 'thumbnail_key' | 'preview_key'> | null;
+}
+
 export async function listPhotos(collectionId: string): Promise<Photo[]> {
   const { data, error } = await createAdminClient()
     .from('photos')
