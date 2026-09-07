@@ -2322,6 +2322,147 @@ export type Database = {
         };
         Relationships: [];
       };
+      collections: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      folders: {
+        Row: {
+          id: string;
+          collection_id: string;
+          name: string;
+          is_retouched: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          collection_id: string;
+          name: string;
+          is_retouched?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          collection_id?: string;
+          name?: string;
+          is_retouched?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      photos: {
+        Row: {
+          id: string;
+          collection_id: string;
+          folder_id: string | null;
+          filename: string;
+          thumbnail_key: string;
+          preview_key: string;
+          original_key: string;
+          file_size_bytes: number | null;
+          width: number | null;
+          height: number | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          collection_id: string;
+          folder_id?: string | null;
+          filename: string;
+          thumbnail_key: string;
+          preview_key: string;
+          original_key: string;
+          file_size_bytes?: number | null;
+          width?: number | null;
+          height?: number | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          collection_id?: string;
+          folder_id?: string | null;
+          filename?: string;
+          thumbnail_key?: string;
+          preview_key?: string;
+          original_key?: string;
+          file_size_bytes?: number | null;
+          width?: number | null;
+          height?: number | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      galleries: {
+        Row: {
+          id: string;
+          collection_id: string;
+          token: string;
+          name: string;
+          is_published: boolean;
+          expiration_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          collection_id: string;
+          token: string;
+          name: string;
+          is_published?: boolean;
+          expiration_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          collection_id?: string;
+          token?: string;
+          name?: string;
+          is_published?: boolean;
+          expiration_date?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      gallery_folder_visibility: {
+        Row: {
+          id: string;
+          gallery_id: string;
+          folder_id: string;
+          is_visible: boolean;
+        };
+        Insert: {
+          id?: string;
+          gallery_id: string;
+          folder_id: string;
+          is_visible?: boolean;
+        };
+        Update: {
+          id?: string;
+          gallery_id?: string;
+          folder_id?: string;
+          is_visible?: boolean;
+        };
+        Relationships: [];
+      };
     };
     Views: {};
     Functions: {};
