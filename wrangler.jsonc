@@ -4,7 +4,7 @@
   // file header. Reverting to ".open-next/worker.js" disables the cron and
   // restores stock OpenNext behaviour.
   "main": "worker.ts",
-  "name": "digital-home-backend",
+  "name": "method26-admin",
   // The CRM engine tick + social publish tick. Was a GitHub Action; GitHub
   // throttles scheduled workflows, which stalls onboarding email.
   "triggers": {
