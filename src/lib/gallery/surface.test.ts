@@ -37,3 +37,13 @@ test('every remaining API route authenticates itself', () => {
   if (existsSync('src/app/api')) walk('src/app/api');
   assert.deepEqual(unprotected, [], `unauthenticated routes: ${unprotected.join(', ')}`);
 });
+
+test('the collections and folders routes authenticate themselves', () => {
+  for (const route of ['src/app/api/gallery/collections/route.ts',
+                       'src/app/api/gallery/folders/route.ts']) {
+    assert.equal(existsSync(route), true, `${route} must exist`);
+    const source = readFileSync(route, 'utf8');
+    assert.ok(source.includes('authenticateSession'), `${route} must authenticate`);
+    assert.ok(source.includes('unauthorizedResponse'), `${route} must reject unauthenticated callers`);
+  }
+});
