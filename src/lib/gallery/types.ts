@@ -33,4 +33,18 @@ export type Gallery = {
   name: string;
   is_published: boolean;
   expiration_date: string | null;
+  cover_photo_id: string | null;
+  downloads_enabled: boolean;
+  email_capture_enabled: boolean;
+};
+
+// One row per person per gallery. Only ever created by the public gallery's
+// email-capture form — the admin never writes this table, only reads it.
+export type GalleryVisitor = {
+  id: string;
+  gallery_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  created_at: string;
 };

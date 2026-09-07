@@ -1,6 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/server';
 import { newGalleryToken } from './token';
-import type { Collection, Folder, Photo, NewPhoto, Gallery } from './types';
+import type { Collection, Folder, Photo, NewPhoto, Gallery, GalleryVisitor } from './types';
+import { rankConsensus, groupFavoritesByVisitor, countByVisitor } from './analytics';
+
+const GALLERY_COLUMNS =
+  'id,collection_id,token,name,is_published,expiration_date,cover_photo_id,downloads_enabled,email_capture_enabled';
 
 // Service-role throughout. RLS is enabled on every gallery table with NO
 // policy, so anon and authenticated are denied everything — the service key
@@ -154,26 +158,55 @@ export async function createPhotos(rows: Omit<NewPhoto, 'sort_order'>[]): Promis
 
 export async function listGalleries(collectionId: string): Promise<Gallery[]> {
   const { data, error } = await createAdminClient()
-    .from('galleries').select('id,collection_id,token,name,is_published,expiration_date')
+    .from('galleries').select(GALLERY_COLUMNS)
     .eq('collection_id', collectionId).order('created_at', { ascending: false });
   if (error) throw new Error(`listGalleries: ${error.message}`);
   return data as Gallery[];
+}
+
+// Used by the settings/analytics routes to load one link by id, and to
+// learn its collection_id server-side — never taken from the request — so
+// a cover photo or any other cross-referenced id can be checked against the
+// collection it actually claims to belong to.
+export async function getGallery(id: string): Promise<Gallery | null> {
+  const { data, error } = await createAdminClient()
+    .from('galleries').select(GALLERY_COLUMNS).eq('id', id).maybeSingle();
+  if (error) throw new Error(`getGallery: ${error.message}`);
+  return data as Gallery | null;
 }
 
 export async function createGallery(collectionId: string, name: string): Promise<Gallery> {
   const { data, error } = await createAdminClient()
     .from('galleries')
     .insert({ collection_id: collectionId, name, token: newGalleryToken(), is_published: false })
-    .select('id,collection_id,token,name,is_published,expiration_date').single();
+    .select(GALLERY_COLUMNS).single();
   if (error) throw new Error(`createGallery: ${error.message}`);
   return data as Gallery;
 }
 
 export async function updateGallery(
-  id: string, patch: { is_published?: boolean; expiration_date?: string | null }
+  id: string,
+  patch: {
+    name?: string;
+    is_published?: boolean;
+    expiration_date?: string | null;
+    cover_photo_id?: string | null;
+    downloads_enabled?: boolean;
+    email_capture_enabled?: boolean;
+  }
 ): Promise<void> {
   const { error } = await createAdminClient().from('galleries').update(patch).eq('id', id);
   if (error) throw new Error(`updateGallery: ${error.message}`);
+}
+
+// Used before writing cover_photo_id: a photo id has to actually belong to
+// this gallery's own collection, or a stray id (typo, stale client state,
+// deliberate probing) would let the cover point at another client's photo.
+export async function photoInCollection(photoId: string, collectionId: string): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from('photos').select('id').eq('id', photoId).eq('collection_id', collectionId).maybeSingle();
+  if (error) throw new Error(`photoInCollection: ${error.message}`);
+  return data !== null;
 }
 
 export async function setFolderVisibility(
@@ -203,24 +236,192 @@ export async function listHiddenFolders(
   return hidden;
 }
 
-// This system has no visitor tracking — no gallery_visitors table, no view
-// or download log. gallery_favorites is the one per-client signal that
-// exists: a client can mark frames from their proofing folders without an
-// email gate. Analytics reads this and nothing else; it must not imply
-// tracking this app doesn't do.
-export async function getFavoritePhotoIds(
-  galleryIds: string[]
-): Promise<Record<string, string[]>> {
-  if (galleryIds.length === 0) return {};
-  const { data, error } = await createAdminClient()
-    .from('gallery_favorites')
-    .select('gallery_id,photo_id')
-    .in('gallery_id', galleryIds);
-  if (error) throw new Error(`getFavoritePhotoIds: ${error.message}`);
+// ---------------------------------------------------------------------
+// Analytics
+//
+// gallery_views, gallery_downloads and gallery_favorites can each run to a
+// few hundred rows for a single client link — small enough to pull in full
+// and aggregate here, in the same spirit as countPhotosByCollection above.
+// What crosses the wire to the browser is always the aggregate or the
+// display-ready list, never a raw table dump for client-side counting.
+//
+// visitor_id is nullable throughout: a gallery with email_capture_enabled
+// off collects views, downloads and favorites with no visitor attached at
+// all. Every function below treats that as "unknowable who", not as zero
+// rows — callers are expected to say so in the UI rather than render an
+// empty-looking table.
+// ---------------------------------------------------------------------
 
-  const favorites: Record<string, string[]> = {};
-  for (const row of data as { gallery_id: string; photo_id: string }[]) {
-    (favorites[row.gallery_id] ??= []).push(row.photo_id);
+async function photosByIds(photoIds: string[]): Promise<Map<string, { id: string; filename: string }>> {
+  if (photoIds.length === 0) return new Map();
+  const { data, error } = await createAdminClient()
+    .from('photos').select('id,filename').in('id', Array.from(new Set(photoIds)));
+  if (error) throw new Error(`photosByIds: ${error.message}`);
+  return new Map((data as { id: string; filename: string }[]).map((p) => [p.id, p]));
+}
+
+async function visitorsByIds(visitorIds: string[]): Promise<Map<string, GalleryVisitor>> {
+  if (visitorIds.length === 0) return new Map();
+  const { data, error } = await createAdminClient()
+    .from('gallery_visitors')
+    .select('id,gallery_id,first_name,last_name,email,created_at')
+    .in('id', Array.from(new Set(visitorIds)));
+  if (error) throw new Error(`visitorsByIds: ${error.message}`);
+  return new Map((data as GalleryVisitor[]).map((v) => [v.id, v]));
+}
+
+export type GalleryOverviewStats = { views: number; visitors: number; favorites: number; downloads: number };
+
+// Head-only counts — Postgres/PostgREST return the row count without the
+// rows ever leaving the database, so this stays cheap regardless of a
+// link's traffic.
+export async function getGalleryOverviewStats(galleryId: string): Promise<GalleryOverviewStats> {
+  const client = createAdminClient();
+  const [views, visitors, favorites, downloads] = await Promise.all([
+    client.from('gallery_views').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
+    client.from('gallery_visitors').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
+    client.from('gallery_favorites').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
+    client.from('gallery_downloads').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
+  ]);
+  const labelled = [['views', views], ['visitors', visitors], ['favorites', favorites], ['downloads', downloads]] as const;
+  for (const [label, result] of labelled) {
+    if (result.error) throw new Error(`getGalleryOverviewStats(${label}): ${result.error.message}`);
   }
-  return favorites;
+  return {
+    views: views.count ?? 0,
+    visitors: visitors.count ?? 0,
+    favorites: favorites.count ?? 0,
+    downloads: downloads.count ?? 0,
+  };
+}
+
+export type FavoriteGroup = {
+  visitor: { id: string; firstName: string; lastName: string; email: string } | null;
+  photos: { id: string; filename: string }[];
+};
+
+// Which frames were picked, and by whom when a visitor is known. Grouped by
+// visitor for display; an extra group with visitor: null carries every
+// favorite this gallery cannot attribute to anyone.
+export async function listFavoritesByVisitor(galleryId: string): Promise<FavoriteGroup[]> {
+  const { data, error } = await createAdminClient()
+    .from('gallery_favorites').select('photo_id,visitor_id').eq('gallery_id', galleryId);
+  if (error) throw new Error(`listFavoritesByVisitor: ${error.message}`);
+  const rows = data as { photo_id: string; visitor_id: string | null }[];
+  const grouped = groupFavoritesByVisitor(rows);
+
+  const [photos, visitors] = await Promise.all([
+    photosByIds(rows.map((r) => r.photo_id)),
+    visitorsByIds(grouped.byVisitor.map((g) => g.visitorId)),
+  ]);
+  const toPhotoList = (ids: string[]) =>
+    ids.map((id) => photos.get(id)).filter((p): p is { id: string; filename: string } => p !== undefined);
+
+  const groups: FavoriteGroup[] = grouped.byVisitor.map((g) => {
+    const visitor = visitors.get(g.visitorId);
+    return {
+      visitor: visitor
+        ? { id: visitor.id, firstName: visitor.first_name, lastName: visitor.last_name, email: visitor.email }
+        : null,
+      photos: toPhotoList(g.photoIds),
+    };
+  });
+  if (grouped.unattributedPhotoIds.length > 0) {
+    groups.push({ visitor: null, photos: toPhotoList(grouped.unattributedPhotoIds) });
+  }
+  return groups;
+}
+
+export type ConsensusFrame = {
+  photoId: string;
+  filename: string;
+  likeCount: number;
+  likedBy: { id: string; firstName: string; lastName: string }[];
+};
+
+// Frames ranked by how many different visitors picked them — the view the
+// studio actually retouches from. See rankConsensus for why an
+// unattributed favorite (no visitor_id) never contributes to the count.
+export async function getConsensusRanking(galleryId: string): Promise<ConsensusFrame[]> {
+  const { data, error } = await createAdminClient()
+    .from('gallery_favorites').select('photo_id,visitor_id').eq('gallery_id', galleryId);
+  if (error) throw new Error(`getConsensusRanking: ${error.message}`);
+  const ranked = rankConsensus(data as { photo_id: string; visitor_id: string | null }[]);
+
+  const [photos, visitors] = await Promise.all([
+    photosByIds(ranked.map((r) => r.photoId)),
+    visitorsByIds(ranked.flatMap((r) => r.visitorIds)),
+  ]);
+
+  return ranked.map((r) => ({
+    photoId: r.photoId,
+    filename: photos.get(r.photoId)?.filename ?? '',
+    likeCount: r.likeCount,
+    likedBy: r.visitorIds
+      .map((id) => visitors.get(id))
+      .filter((v): v is GalleryVisitor => v !== undefined)
+      .map((v) => ({ id: v.id, firstName: v.first_name, lastName: v.last_name })),
+  }));
+}
+
+export type VisitorWithActivity = GalleryVisitor & { viewCount: number; downloadCount: number };
+
+// Who opened the gallery, with first seen (created_at) and how much they
+// did once they were in — used for both the Visitors table and its CSV
+// export.
+export async function listVisitorsWithActivity(galleryId: string): Promise<VisitorWithActivity[]> {
+  const client = createAdminClient();
+  const [visitorsRes, viewsRes, downloadsRes] = await Promise.all([
+    client.from('gallery_visitors').select('id,gallery_id,first_name,last_name,email,created_at')
+      .eq('gallery_id', galleryId).order('created_at', { ascending: false }),
+    client.from('gallery_views').select('visitor_id').eq('gallery_id', galleryId),
+    client.from('gallery_downloads').select('visitor_id').eq('gallery_id', galleryId),
+  ]);
+  if (visitorsRes.error) throw new Error(`listVisitorsWithActivity(visitors): ${visitorsRes.error.message}`);
+  if (viewsRes.error) throw new Error(`listVisitorsWithActivity(views): ${viewsRes.error.message}`);
+  if (downloadsRes.error) throw new Error(`listVisitorsWithActivity(downloads): ${downloadsRes.error.message}`);
+
+  const viewCounts = countByVisitor(viewsRes.data as { visitor_id: string | null }[]);
+  const downloadCounts = countByVisitor(downloadsRes.data as { visitor_id: string | null }[]);
+
+  return (visitorsRes.data as GalleryVisitor[]).map((v) => ({
+    ...v,
+    viewCount: viewCounts.get(v.id) ?? 0,
+    downloadCount: downloadCounts.get(v.id) ?? 0,
+  }));
+}
+
+export type DownloadLogEntry = {
+  photoId: string | null;
+  filename: string | null;
+  visitor: { firstName: string; lastName: string; email: string } | null;
+  downloadedAt: string;
+};
+
+// What was downloaded and when. photo_id and visitor_id are both nullable
+// on this table (a photo can be deleted later; a download can be
+// anonymous), so both are resolved defensively rather than assumed present.
+export async function listDownloadLog(galleryId: string): Promise<DownloadLogEntry[]> {
+  const { data, error } = await createAdminClient()
+    .from('gallery_downloads')
+    .select('photo_id,visitor_id,downloaded_at')
+    .eq('gallery_id', galleryId)
+    .order('downloaded_at', { ascending: false });
+  if (error) throw new Error(`listDownloadLog: ${error.message}`);
+  const rows = data as { photo_id: string | null; visitor_id: string | null; downloaded_at: string }[];
+
+  const [photos, visitors] = await Promise.all([
+    photosByIds(rows.map((r) => r.photo_id).filter((id): id is string => id !== null)),
+    visitorsByIds(rows.map((r) => r.visitor_id).filter((id): id is string => id !== null)),
+  ]);
+
+  return rows.map((r) => {
+    const visitor = r.visitor_id ? visitors.get(r.visitor_id) : undefined;
+    return {
+      photoId: r.photo_id,
+      filename: r.photo_id ? (photos.get(r.photo_id)?.filename ?? null) : null,
+      visitor: visitor ? { firstName: visitor.first_name, lastName: visitor.last_name, email: visitor.email } : null,
+      downloadedAt: r.downloaded_at,
+    };
+  });
 }

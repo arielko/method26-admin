@@ -84,7 +84,10 @@ export type Database = {
       galleries: {
         Row: {
           collection_id: string
+          cover_photo_id: string | null
           created_at: string
+          downloads_enabled: boolean
+          email_capture_enabled: boolean
           expiration_date: string | null
           id: string
           is_published: boolean
@@ -94,7 +97,10 @@ export type Database = {
         }
         Insert: {
           collection_id: string
+          cover_photo_id?: string | null
           created_at?: string
+          downloads_enabled?: boolean
+          email_capture_enabled?: boolean
           expiration_date?: string | null
           id?: string
           is_published?: boolean
@@ -104,7 +110,10 @@ export type Database = {
         }
         Update: {
           collection_id?: string
+          cover_photo_id?: string | null
           created_at?: string
+          downloads_enabled?: boolean
+          email_capture_enabled?: boolean
           expiration_date?: string | null
           id?: string
           is_published?: boolean
@@ -120,23 +129,82 @@ export type Database = {
             referencedRelation: "collections"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "galleries_cover_photo_id_fkey"
+            columns: ["cover_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gallery_downloads: {
+        Row: {
+          downloaded_at: string
+          gallery_id: string
+          id: string
+          photo_id: string | null
+          visitor_id: string | null
+        }
+        Insert: {
+          downloaded_at?: string
+          gallery_id: string
+          id?: string
+          photo_id?: string | null
+          visitor_id?: string | null
+        }
+        Update: {
+          downloaded_at?: string
+          gallery_id?: string
+          id?: string
+          photo_id?: string | null
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_downloads_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "galleries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_downloads_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_downloads_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "gallery_visitors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       gallery_favorites: {
         Row: {
           created_at: string
           gallery_id: string
+          id: string
           photo_id: string
+          visitor_id: string | null
         }
         Insert: {
           created_at?: string
           gallery_id: string
+          id?: string
           photo_id: string
+          visitor_id?: string | null
         }
         Update: {
           created_at?: string
           gallery_id?: string
+          id?: string
           photo_id?: string
+          visitor_id?: string | null
         }
         Relationships: [
           {
@@ -151,6 +219,13 @@ export type Database = {
             columns: ["photo_id"]
             isOneToOne: false
             referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_favorites_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "gallery_visitors"
             referencedColumns: ["id"]
           },
         ]
@@ -181,6 +256,77 @@ export type Database = {
           },
           {
             foreignKeyName: "gallery_folder_visibility_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "galleries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gallery_views: {
+        Row: {
+          gallery_id: string
+          id: string
+          viewed_at: string
+          visitor_id: string | null
+        }
+        Insert: {
+          gallery_id: string
+          id?: string
+          viewed_at?: string
+          visitor_id?: string | null
+        }
+        Update: {
+          gallery_id?: string
+          id?: string
+          viewed_at?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_views_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "galleries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_views_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "gallery_visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gallery_visitors: {
+        Row: {
+          created_at: string
+          email: string
+          first_name: string
+          gallery_id: string
+          id: string
+          last_name: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          first_name: string
+          gallery_id: string
+          id?: string
+          last_name: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          first_name?: string
+          gallery_id?: string
+          id?: string
+          last_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_visitors_gallery_id_fkey"
             columns: ["gallery_id"]
             isOneToOne: false
             referencedRelation: "galleries"
