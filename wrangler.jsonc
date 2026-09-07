@@ -67,6 +67,14 @@
   // the rest) is read via `process.env` at request time inside Worker code
   // and belongs in `wrangler secret put`, never here. A missing one there
   // fails closed with a configuration error.
+  // An EMPTY crons list, stated explicitly. Deleting the "triggers" block
+  // from this file does not remove a schedule already registered on the
+  // deployed Worker — it simply stops mentioning it, and the old cron keeps
+  // firing. The fork's every-five-minutes trigger survived that way and was
+  // still throwing "Handler does not export a scheduled() function" 288
+  // times a day. An empty list is what actually clears it.
+  "triggers": { "crons": [] },
+
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://hyfcsqrwlolkkxopmcqj.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5ZmNzcXJ3bG9sa2t4b3BtY3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MzEwMzcsImV4cCI6MjEwNDMwNzAzN30.VvzM1RAwEjZdDiJLeQWqdmlBefA-bhGMY1283Cnbb5o",
