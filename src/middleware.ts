@@ -47,13 +47,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // The 'social' role (social media manager) lives inside /social only.
-  // The /api boundary is enforced separately in lib/api/auth.ts — non-social
-  // API routes reject social-role sessions by default.
-  const role = (user.app_metadata as { role?: string } | null)?.role;
-  if (role === 'social' && pathname !== '/social' && !pathname.startsWith('/social/')) {
-    return NextResponse.redirect(new URL('/social', request.url));
-  }
+  // The upstream project routes a 'social' role to /social here. That module
+  // is deleted in this fork, so the branch is gone: it would have redirected
+  // such a user to a route that no longer exists. Roles still exist in
+  // lib/api/auth.ts, where authenticateSession defaults to admin-only.
 
   return response;
 }
