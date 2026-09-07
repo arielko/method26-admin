@@ -1,6 +1,5 @@
-import Link from 'next/link';
-import { listCollections } from '@/lib/gallery/queries';
-import { CollectionList } from '@/components/gallery/CollectionList';
+import { listCollections, countPhotosByCollection } from '@/lib/gallery/queries';
+import { CollectionsView } from '@/components/gallery/CollectionsView';
 
 // A server component: middleware has already gated this path, so reading
 // through the service-role client here is safe and saves a round trip.
@@ -13,19 +12,14 @@ import { CollectionList } from '@/components/gallery/CollectionList';
 export const dynamic = 'force-dynamic';
 
 export default async function GalleryPage() {
-  const collections = await listCollections();
+  const [collections, photoCounts] = await Promise.all([
+    listCollections(),
+    countPhotosByCollection(),
+  ]);
+
   return (
-    <main>
-      <h1>Galleries</h1>
-      <CollectionList initial={collections} />
-      {collections.length === 0 && <p>No shoots yet. Create one to start uploading.</p>}
-      <ul>
-        {collections.map((collection) => (
-          <li key={collection.id}>
-            <Link href={`/gallery/${collection.id}`}>{collection.name}</Link>
-          </li>
-        ))}
-      </ul>
+    <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
+      <CollectionsView initialCollections={collections} photoCounts={photoCounts} />
     </main>
   );
 }
