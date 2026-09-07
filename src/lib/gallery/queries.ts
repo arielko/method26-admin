@@ -21,6 +21,30 @@ export async function createCollection(name: string): Promise<Collection> {
   return data as Collection;
 }
 
+// Used by the collection detail page to render a name/header without
+// pulling every collection down first.
+export async function getCollection(id: string): Promise<Collection | null> {
+  const { data, error } = await createAdminClient()
+    .from('collections').select('id,name,created_at').eq('id', id).maybeSingle();
+  if (error) throw new Error(`getCollection: ${error.message}`);
+  return data as Collection | null;
+}
+
+// Used by the galleries index to show a photo count per collection without
+// a round trip per card. Selects only the foreign key — the studio scale
+// this app runs at (dozens of collections, thousands of photos) makes one
+// narrow column pull cheaper than a grouped count RPC, and avoids adding
+// database functions this app would be the only caller of.
+export async function countPhotosByCollection(): Promise<Record<string, number>> {
+  const { data, error } = await createAdminClient().from('photos').select('collection_id');
+  if (error) throw new Error(`countPhotosByCollection: ${error.message}`);
+  const counts: Record<string, number> = {};
+  for (const row of data as { collection_id: string }[]) {
+    counts[row.collection_id] = (counts[row.collection_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 // Used by the presign route to reject a collectionId that names nothing —
 // otherwise a session could mint signed PUT URLs under an arbitrary,
 // possibly non-existent, collection prefix.
@@ -177,4 +201,26 @@ export async function listHiddenFolders(
     (hidden[row.gallery_id] ??= []).push(row.folder_id);
   }
   return hidden;
+}
+
+// This system has no visitor tracking — no gallery_visitors table, no view
+// or download log. gallery_favorites is the one per-client signal that
+// exists: a client can mark frames from their proofing folders without an
+// email gate. Analytics reads this and nothing else; it must not imply
+// tracking this app doesn't do.
+export async function getFavoritePhotoIds(
+  galleryIds: string[]
+): Promise<Record<string, string[]>> {
+  if (galleryIds.length === 0) return {};
+  const { data, error } = await createAdminClient()
+    .from('gallery_favorites')
+    .select('gallery_id,photo_id')
+    .in('gallery_id', galleryIds);
+  if (error) throw new Error(`getFavoritePhotoIds: ${error.message}`);
+
+  const favorites: Record<string, string[]> = {};
+  for (const row of data as { gallery_id: string; photo_id: string }[]) {
+    (favorites[row.gallery_id] ??= []).push(row.photo_id);
+  }
+  return favorites;
 }
