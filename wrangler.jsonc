@@ -1,15 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // worker.ts wraps OpenNext's generated handler to add `scheduled` — see the
-  // file header. Reverting to ".open-next/worker.js" disables the cron and
-  // restores stock OpenNext behaviour.
+  // worker.ts wraps OpenNext's generated handler purely to re-export the
+  // Durable Object classes it generates — see the file header. Reverting to
+  // ".open-next/worker.js" is equivalent as long as nothing else is added
+  // here.
   "main": "worker.ts",
   "name": "method26-admin",
-  // The CRM engine tick + social publish tick. Was a GitHub Action; GitHub
-  // throttles scheduled workflows, which stalls onboarding email.
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  },
+  // This worker used to also run a `*/5 * * * *` cron (see worker.ts's old
+  // `scheduled` handler) that POSTed to /api/crm/tick and /api/social/tick.
+  // Both routes were deleted along with the CRM and social modules on this
+  // branch; the cron kept firing regardless, at 288 invocations a day,
+  // logging a 404 every time. Removed along with the handler.
   // Keep the workers.dev URL alive; add a custom-domain route here when you
   // claim one, e.g. { "pattern": "backend.yourdomain.com", "custom_domain": true }
   "workers_dev": true,
@@ -45,18 +46,30 @@
   "observability": {
     "enabled": true
   },
-  // Non-secret env vars. Secrets (API keys) are set via `wrangler secret put`.
-  // The fork shipped placeholder values here — SUPABASE_URL as
-  // "https://your-project.supabase.co", SUPABASE_ANON_KEY as "your-anon-key"
-  // — alongside vars for the social and R2 modules this fork deleted.
+  // Non-secret env vars, committed plaintext. This is intentional for the
+  // three below and only these three:
   //
-  // They are removed rather than corrected. `vars` are committed plaintext,
-  // which is the wrong home for a project URL that pairs with secret keys,
-  // and a placeholder that merely LOOKS configured is worse than an absent
-  // one: the app would have deployed pointing at a project that does not
-  // exist, and failed at runtime rather than at deploy.
+  //  - NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are
+  //    inlined into the client bundle by `next build`, not read from the
+  //    Worker at request time — `NEXT_PUBLIC_*` never reaches
+  //    `wrangler secret put` at all. login/page.tsx is a client component,
+  //    so on a clean checkout or a CI runner without a hand-copied
+  //    `.env.local`, `next build` bakes in `undefined` and the deployed
+  //    login page fails opaquely. `opennextjs-cloudflare build` reads this
+  //    `vars` block and populates the build environment from it before
+  //    invoking `next build`, so these values now survive a clean checkout.
+  //    An anon key is public by design — the prefix is the promise — so
+  //    committing it plaintext costs nothing.
+  //  - NEXT_PUBLIC_SITE_URL is read by GalleryPanel.tsx to build the
+  //    client-facing link; same build-time inlining applies.
   //
-  // Every value now comes from `wrangler secret put`, set by the owner. A
-  // missing one fails closed with a configuration error.
-  "vars": {}
+  // Everything else (SUPABASE_SERVICE_ROLE_KEY, B2_KEY_ID, B2_APP_KEY, and
+  // the rest) is read via `process.env` at request time inside Worker code
+  // and belongs in `wrangler secret put`, never here. A missing one there
+  // fails closed with a configuration error.
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://hyfcsqrwlolkkxopmcqj.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5ZmNzcXJ3bG9sa2t4b3BtY3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MzEwMzcsImV4cCI6MjEwNDMwNzAzN30.VvzM1RAwEjZdDiJLeQWqdmlBefA-bhGMY1283Cnbb5o",
+    "NEXT_PUBLIC_SITE_URL": "https://method26.com"
+  }
 }
