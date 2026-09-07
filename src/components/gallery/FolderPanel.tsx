@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Folder, Photo } from '@/lib/gallery/types';
+import { PhotoUploader } from './PhotoUploader';
 
 export function FolderPanel({
   collectionId,
@@ -71,6 +72,11 @@ export function FolderPanel({
           <button type="button" onClick={() => toggleRetouched(folder)}>
             {folder.is_retouched ? 'move to proofing' : 'mark retouched'}
           </button>
+          <PhotoUploader
+            collectionId={collectionId}
+            folderId={folder.id}
+            onDone={() => router.refresh()}
+          />
           <p>{photos.filter((p) => p.folder_id === folder.id).length} photograph(s)</p>
         </article>
       ))}
