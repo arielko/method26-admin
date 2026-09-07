@@ -47,10 +47,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // The upstream project routes a 'social' role to /social here. That module
-  // is deleted in this fork, so the branch is gone: it would have redirected
-  // such a user to a route that no longer exists. Roles still exist in
-  // lib/api/auth.ts, where authenticateSession defaults to admin-only.
+  // Being signed in is not the same as being allowed in. Supabase projects
+  // permit self-signup by default and this app's own login page ships the
+  // anon key, so a session proves only that somebody confirmed an email
+  // address. Access requires an explicit grant, matching the same rule in
+  // lib/api/auth.ts — which is what protects /api, since the matcher above
+  // exempts it.
+  //
+  // A signed-in account without the grant is sent back to /login rather than
+  // shown an error page: there is nothing here for them, and the app has no
+  // sign-up route by design.
+  const role = (user.app_metadata as { role?: string } | null)?.role;
+  if (role !== 'admin' && role !== 'social') {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('denied', '1');
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // The upstream project routed a 'social' role to /social here. That module
+  // is deleted in this fork, so the redirect is gone — it would have pointed
+  // at a route that no longer exists.
 
   return response;
 }

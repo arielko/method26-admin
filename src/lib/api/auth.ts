@@ -137,11 +137,26 @@ async function validateSession(opts: AuthOptions = {}): Promise<AuthResult> {
       return { authenticated: false, error: "Not authenticated" };
     }
 
-    const role: SessionRole =
-      (user.app_metadata as { role?: string } | null)?.role === "social" ? "social" : "admin";
+    // Admin is an EXPLICIT grant, never a default.
+    //
+    // The upstream project treated any user without role "social" as an
+    // admin. Self-signup is enabled by default on a Supabase project and the
+    // anon key ships in this app's own login page, so that default meant
+    // anyone who could receive an email could create an account and walk
+    // into the gallery admin — every client's photographs, upload, publish,
+    // overwrite. A session proves who you are; it must not, by itself,
+    // prove you belong here.
+    //
+    // Grant with the service key:
+    //   PUT /auth/v1/admin/users/<id>  { "app_metadata": { "role": "admin" } }
+    const claimed = (user.app_metadata as { role?: string } | null)?.role;
+    if (claimed !== "admin" && claimed !== "social") {
+      return { authenticated: false, error: "This account has not been granted access" };
+    }
+    const role: SessionRole = claimed === "social" ? "social" : "admin";
     const allowed = opts.allowRoles || ["admin"];
     if (!allowed.includes(role)) {
-      return { authenticated: false, error: "This account only has access to the social studio" };
+      return { authenticated: false, error: "This account does not have access to this area" };
     }
 
     return { authenticated: true, mode: "session", userId: user.id, role };
