@@ -22,14 +22,12 @@ export function CollectionDetail({
   photos,
   galleries,
   hidden,
-  favorites,
 }: {
   collection: Collection;
   folders: Folder[];
   photos: Photo[];
   galleries: Gallery[];
   hidden: Record<string, string[]>;
-  favorites: Record<string, string[]>;
 }) {
   const [view, setView] = useState<View>('photos');
   const router = useRouter();
@@ -83,17 +81,13 @@ export function CollectionDetail({
             collectionId={collection.id}
             galleries={galleries}
             folders={folders}
+            photos={photos}
             hidden={hidden}
             onChanged={() => router.refresh()}
           />
         )}
         {view === 'analytics' && (
-          <AnalyticsPanel
-            folders={folders}
-            photos={photos}
-            galleries={galleries}
-            favorites={favorites}
-          />
+          <AnalyticsPanel folders={folders} photos={photos} galleries={galleries} />
         )}
       </div>
     </div>

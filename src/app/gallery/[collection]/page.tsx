@@ -5,7 +5,6 @@ import {
   listPhotos,
   listGalleries,
   listHiddenFolders,
-  getFavoritePhotoIds,
 } from '@/lib/gallery/queries';
 import { CollectionDetail } from '@/components/gallery/CollectionDetail';
 
@@ -28,10 +27,7 @@ export default async function CollectionPage({
   if (!collection) notFound();
 
   const galleryIds = galleries.map((g) => g.id);
-  const [hidden, favorites] = await Promise.all([
-    listHiddenFolders(galleryIds),
-    getFavoritePhotoIds(galleryIds),
-  ]);
+  const hidden = await listHiddenFolders(galleryIds);
 
   return (
     <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
@@ -41,7 +37,6 @@ export default async function CollectionPage({
         photos={photos}
         galleries={galleries}
         hidden={hidden}
-        favorites={favorites}
       />
     </main>
   );

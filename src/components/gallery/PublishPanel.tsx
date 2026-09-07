@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { Gallery, Folder } from '@/lib/gallery/types';
+import type { Gallery, Folder, Photo } from '@/lib/gallery/types';
+import { GallerySettingsPanel } from './GallerySettingsPanel';
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
 
@@ -9,12 +10,14 @@ export function PublishPanel({
   collectionId,
   galleries,
   folders,
+  photos,
   hidden,
   onChanged,
 }: {
   collectionId: string;
   galleries: Gallery[];
   folders: Folder[];
+  photos: Photo[];
   hidden: Record<string, string[]>;
   onChanged: () => void;
 }) {
@@ -23,6 +26,7 @@ export function PublishPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -179,6 +183,14 @@ export function PublishPanel({
                     >
                       {gallery.is_published ? 'Unpublish' : 'Publish'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenSettingsId((cur) => (cur === gallery.id ? null : gallery.id))}
+                      aria-expanded={openSettingsId === gallery.id}
+                      className="border border-stone px-3 py-1.5 text-[11px] uppercase tracking-wide text-ink hover:border-ink transition-colors"
+                    >
+                      {openSettingsId === gallery.id ? 'Close settings' : 'Settings'}
+                    </button>
                   </div>
                 </div>
 
@@ -192,53 +204,24 @@ export function PublishPanel({
                           ? `Expires ${new Date(gallery.expiration_date).toLocaleDateString()}`
                           : 'No expiry — this link works indefinitely'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => patch(gallery.id, { expiresInDays: 30 })}
-                    className="uppercase tracking-wide underline decoration-stone underline-offset-4 hover:decoration-ink"
-                  >
-                    Expire in 30 days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => patch(gallery.id, { expiresInDays: 90 })}
-                    className="uppercase tracking-wide underline decoration-stone underline-offset-4 hover:decoration-ink"
-                  >
-                    Expire in 90 days
-                  </button>
-                  {gallery.expiration_date && (
-                    <button
-                      type="button"
-                      onClick={() => patch(gallery.id, { expiresInDays: null })}
-                      className="uppercase tracking-wide underline decoration-stone underline-offset-4 hover:decoration-ink"
-                    >
-                      Remove expiry
-                    </button>
-                  )}
+                  <span>
+                    {folders.length - hiddenHere.length}/{folders.length} folder
+                    {folders.length === 1 ? '' : 's'} visible
+                  </span>
+                  <span>{gallery.downloads_enabled ? 'Downloads on' : 'Downloads off'}</span>
+                  <span>{gallery.email_capture_enabled ? 'Email capture on' : 'Email capture off'}</span>
                 </div>
 
-                <details className="border-t border-stone px-4 py-3">
-                  <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-ink">
-                    Folders this client sees ({folders.length - hiddenHere.length}/{folders.length})
-                  </summary>
-                  <ul className="mt-3 flex flex-col gap-2">
-                    {folders.map((folder) => {
-                      const isHidden = hiddenHere.includes(folder.id);
-                      return (
-                        <li key={folder.id}>
-                          <label className="flex items-center gap-2 text-[12px] text-ink">
-                            <input
-                              type="checkbox"
-                              checked={!isHidden}
-                              onChange={(e) => setVisibility(gallery.id, folder.id, e.target.checked)}
-                            />
-                            <span>{folder.name}</span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
+                {openSettingsId === gallery.id && (
+                  <GallerySettingsPanel
+                    gallery={gallery}
+                    folders={folders}
+                    photos={photos}
+                    hidden={hiddenHere}
+                    onPatch={(changes) => patch(gallery.id, changes)}
+                    onSetVisibility={(folderId, isVisible) => setVisibility(gallery.id, folderId, isVisible)}
+                  />
+                )}
               </li>
             );
           })}
