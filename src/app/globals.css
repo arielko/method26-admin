@@ -2,24 +2,50 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* The site's two faces. Archivo carries headings, IBM Plex Mono the meta and
+   label voice — the same split the public gallery uses, so the studio's
+   admin and the client's view read as one system. */
+@import "@fontsource-variable/archivo";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
 @custom-variant dark (&:is(.dark *));
 @source "../../src";
 
 @theme {
-  /* Ultra-minimal palette */
-  --color-minimal-bg: #000000;
-  --color-minimal-border: #262626;
-  --color-minimal-muted: #737373;
-  --color-minimal-accent: #ffffff;
-  --color-minimal-row: #090909;
+  /* method26's palette, sampled from the logo and shared with the public
+     site. Two usage rules travel with it and are not stylistic:
+       - amber is NEVER text anywhere. It is 2.84:1 on paper and fails even
+         the 3:1 non-text floor. Marks, rules and trim only.
+       - slate is NEVER text below 32px. It is 4.03:1. Use ink for body copy.
+     Photographs are the only real colour on any of these screens; the
+     interface recedes. */
+  --color-paper: #F6F6F4;
+  --color-ink: #141518;
+  --color-slate: #727a80;
+  --color-amber: #d77d20;
+  --color-stone: #E8E9E6;
 
-  /* Status dot colors */
-  --color-status-planned: #525252;
-  --color-status-approved: #a78bfa;
-  --color-status-writing: #eab308;
-  --color-status-draft: #525252;
-  --color-status-published: #22c55e;
-  --color-status-archived: #373737;
+  /* The upstream theme's names are kept so its components restyle without
+     being rewritten — only what they resolve to has changed, from a black
+     ground to paper. */
+  --color-minimal-bg: #F6F6F4;
+  --color-minimal-border: #E8E9E6;
+  --color-minimal-muted: #141518;
+  --color-minimal-accent: #141518;
+  --color-minimal-row: #FFFFFF;
+
+  --font-sans: 'Archivo Variable', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Status dots are marks, not text, so colour is legitimate here. */
+  --color-status-planned: #727a80;
+  --color-status-approved: #d77d20;
+  --color-status-writing: #d77d20;
+  --color-status-draft: #727a80;
+  --color-status-published: #141518;
+  --color-status-archived: #E8E9E6;
 }
 
 *,
@@ -29,9 +55,9 @@
 }
 
 body {
-  background: var(--color-minimal-bg);
-  color: var(--color-minimal-accent);
-  font-family: var(--font-sans, 'Geist Sans', system-ui, -apple-system, sans-serif);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -361,3 +387,27 @@ html:not(.dark) .article-preview a { color: #0a0a0a; }
 html:not(.dark) .article-preview strong { color: #27272a; }
 html:not(.dark) .article-preview ul, html:not(.dark) .article-preview ol { color: #52525b; }
 html:not(.dark) .article-preview blockquote { border-left-color: #e4e4e7; color: #71717a; }
+
+
+/* ── method26 house rules ────────────────────────────────────────────────
+   Square corners everywhere. The site's single documented exception is the
+   hero's registration dot, which does not exist in this application, so
+   here the rule is unqualified. */
+*, *::before, *::after { border-radius: 0 !important; }
+
+/* Mono is the label and meta voice, matching the public gallery. */
+label, legend, code, .mono, button, input, select, textarea {
+  font-family: var(--font-mono);
+}
+
+h1, h2, h3 { font-family: var(--font-sans); letter-spacing: -0.01em; }
+
+input, select, textarea {
+  background: #FFFFFF;
+  color: var(--color-ink);
+  border: 1px solid var(--color-slate);
+  padding: 0.5rem 0.6rem;
+}
+
+/* Amber as a mark only — never as text. */
+button[type="submit"] { border-block-end: 2px solid var(--color-amber); }

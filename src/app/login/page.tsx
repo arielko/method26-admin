@@ -33,15 +33,17 @@ export default function LoginPage() {
       <form onSubmit={handleLogin} className="w-full max-w-[360px] px-10">
         {/* Logo */}
         <div className="mb-16">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-white mb-6" viewBox="0 0 256 256" fill="currentColor">
-            <path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200Z" />
-          </svg>
-          <h1 className="text-base font-semibold text-white">Digital Home</h1>
+          {/* The registration disc from the site's own logo — the same mark a
+              client sees on their gallery, so the studio's admin and the
+              client's view are visibly one system. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/favicon.svg" alt="" width={32} height={32} className="mb-6" />
+          <h1 className="text-base font-semibold text-[var(--color-ink)]">method26</h1>
         </div>
 
         {/* Email */}
         <div className="mb-6">
-          <label htmlFor="email" className="block text-[13px] font-medium text-zinc-300 mb-2">
+          <label htmlFor="email" className="block text-[13px] font-medium text-[var(--color-ink)] mb-2">
             Email
           </label>
           <input
@@ -50,13 +52,13 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full bg-minimal-row border border-minimal-border rounded-lg px-3 py-2.5 text-[14px] text-white focus:outline-none focus:border-zinc-500 transition-colors"
+            className="w-full bg-minimal-row border border-minimal-border rounded-lg px-3 py-2.5 text-[14px] text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-slate)] transition-colors"
           />
         </div>
 
         {/* Password */}
         <div className="mb-8">
-          <label htmlFor="password" className="block text-[13px] font-medium text-zinc-300 mb-2">
+          <label htmlFor="password" className="block text-[13px] font-medium text-[var(--color-ink)] mb-2">
             Password
           </label>
           <input
@@ -65,7 +67,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full bg-minimal-row border border-minimal-border rounded-lg px-3 py-2.5 text-[14px] text-white focus:outline-none focus:border-zinc-500 transition-colors"
+            className="w-full bg-minimal-row border border-minimal-border rounded-lg px-3 py-2.5 text-[14px] text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-slate)] transition-colors"
           />
         </div>
 
@@ -78,7 +80,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 bg-white text-black text-[14px] font-semibold rounded-lg disabled:opacity-30 transition-opacity"
+          className="w-full py-2.5 bg-[var(--color-ink)] text-[var(--color-paper)] text-[14px] font-semibold rounded-lg disabled:opacity-30 transition-opacity"
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

@@ -12,7 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Digital Home Platform',
+  title: 'method26 — galleries',
+  icons: { icon: '/favicon.svg' },
   description: 'The operating system for your digital presence.',
   robots: 'noindex, nofollow',
 };
@@ -31,7 +32,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body className={`${geist.variable} ${geistMono.variable} bg-minimal-bg text-white font-sans h-screen w-screen overflow-hidden flex antialiased`}>
+      <body className={`${geist.variable} ${geistMono.variable} bg-minimal-bg text-[var(--color-ink)] font-sans h-screen w-screen overflow-hidden flex antialiased`}>
         <Sidebar />
         <main className="flex-1 flex flex-col h-full overflow-hidden">
           {children}

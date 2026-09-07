@@ -1,8 +1,8 @@
 {
-  "name": "digital-home-backend",
+  "name": "method26-admin",
   "version": "0.1.0",
   "private": true,
-  "description": "The Digital Home Platform — an open-source operating system for your digital presence. Content pipeline, lead management, email sequences, analytics, and agent oversight.",
+  "description": "Gallery admin for method26 — client photo proofing and retouched delivery.",
   "engines": {
     "node": ">=22"
   },
@@ -22,6 +22,8 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@opennextjs/cloudflare": "^1.19.5",
     "@supabase/ssr": "~0.9.0",
     "@supabase/supabase-js": "~2.99.1",

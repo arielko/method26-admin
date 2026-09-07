@@ -36,7 +36,7 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
     <button
       onClick={toggle}
       title={light ? 'Switch to dark mode' : 'Switch to light mode'}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-minimal-muted hover:text-white hover:bg-minimal-row transition-colors w-full ${
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-minimal-muted hover:text-[var(--color-ink)] hover:bg-minimal-row transition-colors w-full ${
         collapsed ? 'justify-center' : ''
       }`}
     >
@@ -81,16 +81,16 @@ export function Sidebar() {
     >
       {/* Wordmark + collapse toggle */}
       <div className={`flex items-center px-3 mb-6 ${collapsed ? 'flex-col gap-3' : 'justify-between'}`}>
-        <Link href="/gallery" className="flex items-center gap-2.5 px-1.5" title="Digital Home">
-          <span className="w-6 h-6 rounded-md bg-white text-black text-[11px] font-bold flex items-center justify-center shrink-0">
+        <Link href="/gallery" className="flex items-center gap-2.5 px-1.5" title="method26">
+          <span className="w-6 h-6 rounded-md bg-[var(--color-ink)] text-[var(--color-paper)] text-[11px] font-bold flex items-center justify-center shrink-0">
             B
           </span>
-          {!collapsed && <span className="text-[14px] font-semibold text-white">Digital Home</span>}
+          {!collapsed && <span className="text-[14px] font-semibold text-[var(--color-ink)]">method26</span>}
         </Link>
         <button
           onClick={toggleCollapsed}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="text-minimal-muted hover:text-white p-1.5 rounded-md hover:bg-minimal-row transition-colors"
+          className="text-minimal-muted hover:text-[var(--color-ink)] p-1.5 rounded-md hover:bg-minimal-row transition-colors"
         >
           {collapsed ? (
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 256 256" fill="currentColor">
@@ -118,8 +118,8 @@ export function Sidebar() {
                 collapsed ? 'justify-center' : ''
               } ${
                 isActive
-                  ? 'bg-minimal-row text-white'
-                  : 'text-minimal-muted hover:text-white hover:bg-minimal-row'
+                  ? 'bg-minimal-row text-[var(--color-ink)]'
+                  : 'text-minimal-muted hover:text-[var(--color-ink)] hover:bg-minimal-row'
               }`}
             >
               {item.icon}
