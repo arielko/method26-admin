@@ -94,3 +94,21 @@ export async function setFolderVisibility(
     .upsert({ gallery_id: galleryId, folder_id: folderId, is_visible: isVisible });
   if (error) throw new Error(`setFolderVisibility: ${error.message}`);
 }
+
+export async function listHiddenFolders(
+  galleryIds: string[]
+): Promise<Record<string, string[]>> {
+  if (galleryIds.length === 0) return {};
+  const { data, error } = await createAdminClient()
+    .from('gallery_folder_visibility')
+    .select('gallery_id,folder_id')
+    .in('gallery_id', galleryIds)
+    .eq('is_visible', false);
+  if (error) throw new Error(`listHiddenFolders: ${error.message}`);
+
+  const hidden: Record<string, string[]> = {};
+  for (const row of data as { gallery_id: string; folder_id: string }[]) {
+    (hidden[row.gallery_id] ??= []).push(row.folder_id);
+  }
+  return hidden;
+}

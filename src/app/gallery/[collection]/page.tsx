@@ -1,4 +1,4 @@
-import { listFolders, listPhotos, listGalleries } from '@/lib/gallery/queries';
+import { listFolders, listPhotos, listGalleries, listHiddenFolders } from '@/lib/gallery/queries';
 import { FolderPanel } from '@/components/gallery/FolderPanel';
 import { GalleryPanel } from '@/components/gallery/GalleryPanel';
 
@@ -13,12 +13,13 @@ export default async function CollectionPage({
     listPhotos(collection),
     listGalleries(collection),
   ]);
+  const hidden = await listHiddenFolders(galleries.map((g) => g.id));
 
   return (
     <main>
       <h1>Shoot</h1>
       <FolderPanel collectionId={collection} folders={folders} photos={photos} />
-      <GalleryPanel collectionId={collection} galleries={galleries} />
+      <GalleryPanel collectionId={collection} galleries={galleries} folders={folders} hidden={hidden} />
     </main>
   );
 }

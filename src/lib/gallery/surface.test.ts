@@ -64,3 +64,10 @@ test('a gallery token is never taken from the request', () => {
   assert.ok(!/body\.token|body\[['"]token['"]\]/.test(source),
     'the route must not read a token from the request body');
 });
+
+test('the visibility route authenticates itself', () => {
+  const route = 'src/app/api/gallery/visibility/route.ts';
+  assert.equal(existsSync(route), true, `${route} must exist`);
+  const source = readFileSync(route, 'utf8');
+  assert.ok(source.includes('authenticateSession'), `${route} must authenticate`);
+});

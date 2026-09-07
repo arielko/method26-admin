@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Gallery } from '@/lib/gallery/types';
+import type { Gallery, Folder } from '@/lib/gallery/types';
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
 
 export function GalleryPanel({
   collectionId,
   galleries,
+  folders,
+  hidden,
 }: {
   collectionId: string;
   galleries: Gallery[];
+  folders: Folder[];
+  hidden: Record<string, string[]>;
 }) {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +104,39 @@ export function GalleryPanel({
             <button type="button" onClick={() => patch(gallery.id, { expiresInDays: null })}>
               remove expiry
             </button>
+
+            <fieldset>
+              <legend>folders this client sees</legend>
+              {folders.map((folder) => {
+                const isHidden = (hidden[gallery.id] ?? []).includes(folder.id);
+                return (
+                  <label key={folder.id}>
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={async (event) => {
+                        setError(null);
+                        const response = await fetch('/api/gallery/visibility', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            galleryId: gallery.id,
+                            folderId: folder.id,
+                            isVisible: event.target.checked,
+                          }),
+                        });
+                        if (!response.ok) {
+                          setError(`Could not change visibility (${response.status})`);
+                          return;
+                        }
+                        router.refresh();
+                      }}
+                    />
+                    <span>{folder.name}</span>
+                  </label>
+                );
+              })}
+            </fieldset>
           </article>
         );
       })}
