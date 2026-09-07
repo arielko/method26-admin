@@ -46,29 +46,34 @@ export function PhotoUploader({
   }
 
   return (
-    <div>
-      <label>
-        <span>Add photographs</span>
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[11px] uppercase tracking-wide text-ink">Add photographs</span>
         <input
           type="file"
           multiple
           accept="image/*"
           disabled={progress !== null}
           onChange={(event) => handleFiles(event.target.files)}
+          className="text-[12px]"
         />
       </label>
       {progress && (
-        <p role="status">
+        <p role="status" className="text-[12px] text-ink">
           {progress.done} of {progress.total} — {progress.filename}
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" className="border border-stone bg-white px-3 py-2 text-[12px] text-ink">
+          {error}
+        </p>
+      )}
       {failures.length > 0 && (
-        <div role="alert">
+        <div role="alert" className="border border-stone bg-white px-3 py-2 text-[12px] text-ink">
           <p>
             {failures.length} file{failures.length === 1 ? '' : 's'} could not be uploaded:
           </p>
-          <ul>
+          <ul className="mt-1 flex flex-col gap-0.5">
             {failures.map((failure) => (
               <li key={failure.filename}>
                 {failure.filename} — {failure.error}
