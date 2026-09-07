@@ -47,3 +47,20 @@ test('the collections and folders routes authenticate themselves', () => {
     assert.ok(source.includes('unauthorizedResponse'), `${route} must reject unauthenticated callers`);
   }
 });
+
+test('the galleries routes authenticate themselves', () => {
+  for (const route of ['src/app/api/gallery/galleries/route.ts',
+                       'src/app/api/gallery/galleries/[id]/route.ts']) {
+    assert.equal(existsSync(route), true, `${route} must exist`);
+    const source = readFileSync(route, 'utf8');
+    assert.ok(source.includes('authenticateSession'), `${route} must authenticate`);
+  }
+});
+
+test('a gallery token is never taken from the request', () => {
+  // The token is the entire access control on the public site. Accepting
+  // one from a caller would let somebody pick a short or guessable value.
+  const source = readFileSync('src/app/api/gallery/galleries/route.ts', 'utf8');
+  assert.ok(!/body\.token|body\[['"]token['"]\]/.test(source),
+    'the route must not read a token from the request body');
+});

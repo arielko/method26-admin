@@ -1,5 +1,6 @@
 import { listFolders, listPhotos, listGalleries } from '@/lib/gallery/queries';
 import { FolderPanel } from '@/components/gallery/FolderPanel';
+import { GalleryPanel } from '@/components/gallery/GalleryPanel';
 
 export default async function CollectionPage({
   params,
@@ -17,7 +18,7 @@ export default async function CollectionPage({
     <main>
       <h1>Shoot</h1>
       <FolderPanel collectionId={collection} folders={folders} photos={photos} />
-      <p>{galleries.length} client link(s)</p>
+      <GalleryPanel collectionId={collection} galleries={galleries} />
     </main>
   );
 }
