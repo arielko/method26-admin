@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, Download, Heart, MailCheck, Mail, HardDrive, FileDown } from 'lucide-react';
+import { Download, Heart, MailCheck, Mail, HardDrive, FileDown, Users } from 'lucide-react';
 import type { Photo, Gallery } from '@/lib/gallery/types';
 import type {
   GalleryOverviewStats,
@@ -149,7 +149,9 @@ export function AnalyticsPanel({
     );
   }
 
-  const maxActivity = Math.max(1, ...activity30d.map((d) => Math.max(d.views, d.downloads)));
+  // Scaled to downloads alone. While views were in this max, a single view
+  // spike set the scale and every download bar rounded to nothing.
+  const maxDownloads = Math.max(1, ...activity30d.map((d) => d.downloads));
 
   return (
     <div className="flex flex-col gap-6">
@@ -200,7 +202,10 @@ export function AnalyticsPanel({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {(
               [
-                { label: 'Views', value: stats.views, icon: Eye },
+                // Views are still recorded (gallery_views), just not shown:
+                // a page-view count answers nothing the studio acts on, and
+                // it dominated the 30-day chart's scale so downloads — the
+                // number that does matter — were invisible beside it.
                 { label: 'Downloads', value: stats.downloads, icon: Download },
                 { label: 'Favorites', value: stats.favorites, icon: Heart },
                 { label: 'Emails Captured', value: stats.visitors, icon: MailCheck },
@@ -227,21 +232,21 @@ export function AnalyticsPanel({
               <p className="text-[13px] text-ink">No activity yet.</p>
             ) : (
               <>
+                {/* Downloads only. Scaled to the busiest download day rather
+                    than to all activity — with views in the series one view
+                    spike set the scale and every download bar rounded to
+                    nothing. */}
                 <div className="flex h-20 items-end gap-[2px]">
                   {activity30d.map((day) => (
                     <div
                       key={day.date}
-                      className="flex h-full flex-1 items-end gap-[1px]"
-                      title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.views} view${day.views === 1 ? '' : 's'}, ${day.downloads} download${day.downloads === 1 ? '' : 's'}`}
+                      className="flex h-full flex-1 items-end"
+                      title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.downloads} download${day.downloads === 1 ? '' : 's'}`}
                     >
                       <div
-                        className="flex-1 bg-ink"
-                        style={{ height: day.views > 0 ? `${Math.max((day.views / maxActivity) * 100, 6)}%` : '0%' }}
-                      />
-                      <div
-                        className="flex-1 bg-amber"
+                        className="w-full bg-ink"
                         style={{
-                          height: day.downloads > 0 ? `${Math.max((day.downloads / maxActivity) * 100, 6)}%` : '0%',
+                          height: day.downloads > 0 ? `${Math.max((day.downloads / maxDownloads) * 100, 6)}%` : '0%',
                         }}
                       />
                     </div>
@@ -249,10 +254,7 @@ export function AnalyticsPanel({
                 </div>
                 <div className="mt-2 flex items-center gap-4">
                   <span className="flex items-center gap-1.5 text-[11px] text-ink">
-                    <span aria-hidden className="h-2 w-2 bg-ink" /> Views
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[11px] text-ink">
-                    <span aria-hidden className="h-2 w-2 bg-amber" /> Downloads
+                    <span aria-hidden className="h-2 w-2 bg-ink" /> Downloads
                   </span>
                 </div>
               </>
@@ -274,14 +276,35 @@ export function AnalyticsPanel({
           ) : (
             favoriteGroups.map((group, i) => (
               <div key={group.visitor?.id ?? `unattributed-${i}`} className="border border-stone bg-white p-4">
-                <p className="text-[13px] font-semibold text-ink">
-                  {group.visitor ? `${group.visitor.firstName} ${group.visitor.lastName}` : 'No visitor on record'}
-                </p>
-                {group.visitor && <p className="text-[11px] text-ink">{group.visitor.email}</p>}
-                <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+                {/* One block per person, with their count on the right — the
+                    studio's question here is "what did THIS client pick", and
+                    the count answers "have they finished choosing" without
+                    scrolling the grid. */}
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="flex items-center gap-2 text-[13px] text-ink">
+                    <Users className="h-3.5 w-3.5 shrink-0 text-ink/60" aria-hidden />
+                    <span className="font-semibold">
+                      {group.visitor ? `${group.visitor.firstName} ${group.visitor.lastName}` : 'No visitor on record'}
+                    </span>
+                    {group.visitor && <span className="text-ink/70">({group.visitor.email})</span>}
+                  </p>
+                  <p className="font-mono text-[11px] text-ink">
+                    {group.photos.length} favorite{group.photos.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                   {group.photos.map((photo) => (
-                    <li key={photo.id} className="aspect-square overflow-hidden border border-stone">
-                      <PhotoThumb photoId={photo.id} alt={photo.filename} className="h-full w-full object-cover" />
+                    <li key={photo.id} className="border border-stone">
+                      {/* 4:3, not square: these are headshots, and a square
+                          crop cuts the top of the frame off the thumbnail. */}
+                      <div className="aspect-[4/3] overflow-hidden">
+                        <PhotoThumb photoId={photo.id} alt={photo.filename} className="h-full w-full object-cover" />
+                      </div>
+                      {/* The filename is how the studio and the client refer
+                          to a frame out loud — it is the point of the list. */}
+                      <p className="truncate bg-paper px-1.5 py-1 font-mono text-[10px] text-ink" title={photo.filename}>
+                        {photo.filename}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -306,26 +329,47 @@ export function AnalyticsPanel({
           {consensus.length === 0 ? (
             <p className="text-[13px] text-ink">No frames with more than one identified favorite yet.</p>
           ) : (
-            <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-              {consensus.map((frame) => (
-                <li key={frame.photoId} className="border border-stone bg-white">
-                  <div className="aspect-square overflow-hidden border-b border-stone">
-                    <PhotoThumb photoId={frame.photoId} alt={frame.filename} className="h-full w-full object-cover" />
-                  </div>
-                  <div className="p-2">
-                    <p className="text-[11px] font-semibold text-ink">
-                      {frame.likeCount} visitor{frame.likeCount === 1 ? '' : 's'}
-                    </p>
-                    <p
-                      className="mt-0.5 truncate text-[10px] text-ink"
-                      title={frame.likedBy.map((v) => `${v.firstName} ${v.lastName}`).join(', ')}
-                    >
-                      {frame.likedBy.map((v) => `${v.firstName} ${v.lastName[0] ?? ''}.`).join(', ')}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink">Overlaps</p>
+                <span className="bg-amber/15 px-2 py-0.5 font-mono text-[11px] text-ink">
+                  {consensus.length} photo{consensus.length === 1 ? '' : 's'} liked by 2+
+                </span>
+              </div>
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {consensus.map((frame) => (
+                  <li key={frame.photoId} className="relative border border-amber bg-white">
+                    <div className="aspect-[4/3] overflow-hidden border-b border-stone">
+                      <PhotoThumb photoId={frame.photoId} alt={frame.filename} className="h-full w-full object-cover" />
+                    </div>
+                    {/* The vote count as a badge on the frame, so a glance
+                        across the grid ranks it without reading captions.
+                        Amber is the ground with ink on it — amber is 2.84:1
+                        and cannot carry text itself. */}
+                    <span className="absolute right-2 top-2 flex items-center gap-1 bg-amber px-1.5 py-0.5 font-mono text-[11px] text-ink">
+                      <Heart className="h-3 w-3 fill-ink" aria-hidden />
+                      {frame.likeCount}
+                    </span>
+                    <div className="p-2">
+                      <p className="truncate font-mono text-[10px] text-ink" title={frame.filename}>
+                        {frame.filename}
+                      </p>
+                      {/* Initials, not full names: at six columns a name list
+                          wraps or truncates to uselessness, and the full list
+                          is one hover away. */}
+                      <p
+                        className="mt-0.5 truncate font-mono text-[10px] text-ink/70"
+                        title={frame.likedBy.map((v) => `${v.firstName} ${v.lastName}`).join(', ')}
+                      >
+                        {frame.likedBy
+                          .map((v) => `${v.firstName[0] ?? ''}${v.lastName[0] ?? ''}`.toUpperCase())
+                          .join(', ')}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}
