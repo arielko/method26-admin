@@ -180,6 +180,18 @@ export async function uploadPhotos(
         ? '.webp'
         : (file.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.jpg').toLowerCase();
 
+      // The recorded filename follows the stored bytes too, not just the key.
+      // This is the name the client sees in their gallery and the name their
+      // browser saves the download under — handing somebody WebP called
+      // .jpg means a file their software may refuse to open, and it is the
+      // same lie as an object called thumb.jpg holding WebP.
+      //
+      // A retouched frame keeps its own name exactly, because it keeps its
+      // own bytes exactly.
+      const storedFilename = original
+        ? file.name.replace(/\.[a-z0-9]+$/i, '') + '.webp'
+        : file.name;
+
       const presignResponse = await fetch('/api/gallery/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,7 +259,7 @@ export async function uploadPhotos(
           photos: [
             {
               folder_id: folderId,
-              filename: file.name,
+              filename: storedFilename,
               ...keys,
               file_size_bytes: originalBlob.size,
               width,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -132,6 +132,15 @@ export function CollectionDetail({
     activeFolderId === RETOUCHED_FILTER
       ? folders.find((f) => f.is_retouched)?.id
       : (activeFolderId ?? folders.find((f) => !f.is_retouched)?.id);
+
+  // The aggregate row can disappear (it only renders above one retouched
+  // folder). If it was the active view when that happened, fall back to All
+  // Photos rather than leaving a selection nothing on screen can clear.
+  useEffect(() => {
+    if (activeFolderId === RETOUCHED_FILTER && retouchedFolderIds.size <= 1) {
+      setActiveFolderId(retouchedFolderIds.size === 1 ? [...retouchedFolderIds][0] : undefined);
+    }
+  }, [activeFolderId, retouchedFolderIds]);
 
   async function setCoverFromDrop(photoId: string) {
     setError(null);
@@ -379,12 +388,16 @@ export function CollectionDetail({
                 </span>
               </button>
 
-              {/* Built-in, always present — not one of the photographer's
-                  own folders, so it survives even when the collection has
-                  no is_retouched folder yet. Aggregates every photograph in
-                  every folder marked retouched, the split that decides
-                  whether a client sees a frame on their proofing page or
-                  their delivery page. */}
+              {/* An aggregate across every folder marked retouched — the
+                  split that decides whether a client sees a frame on their
+                  proofing page or their delivery page.
+
+                  Shown only when there is something to aggregate: with a
+                  single retouched folder this row and that folder list the
+                  same photographs under the same word, which read as two
+                  Retouched entries with the same count and no way to tell
+                  them apart. With none, it is a filter over nothing. */}
+              {retouchedFolderIds.size > 1 && (
               <button
                 type="button"
                 onClick={() => setActiveFolderId(RETOUCHED_FILTER)}
@@ -399,6 +412,7 @@ export function CollectionDetail({
                   {retouchedCount}
                 </span>
               </button>
+              )}
 
               {folders.map((folder) => {
                 const isActive = activeFolderId === folder.id;

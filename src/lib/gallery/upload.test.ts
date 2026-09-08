@@ -150,10 +150,12 @@ test('the retouched view never uploads into an ordinary folder', () => {
     /RETOUCHED_FILTER[\s\S]*folders\.find\(\(f\) => f\.is_retouched\)/,
     'the retouched view must resolve to a folder that is actually retouched'
   );
+  // The kind still travels with the request — the server picks or creates a
+  // folder of that kind — but the client no longer names or creates it.
   assert.match(
     uploaderSource,
-    /name: isRetouchedTarget \? 'Retouched' : 'Photos'[\s\S]*isRetouched: isRetouchedTarget/,
-    'a folder created on demand from the retouched view must itself be retouched'
+    /ensureDefault: true,\s*isRetouched: isRetouchedTarget,/,
+    'a folder opened on demand from the retouched view must itself be retouched'
   );
 });
 
@@ -206,5 +208,36 @@ test('upload progress is reported per byte, not per file', () => {
     uploaderSource,
     /role="progressbar"[\s\S]{0,200}aria-valuenow=\{progress\.batchPercent\}/,
     'the bar must expose its value to assistive technology'
+  );
+});
+
+test('the recorded filename follows the stored bytes', () => {
+  // The client sees this name in their gallery and their browser saves the
+  // download under it. WebP bytes called .jpg is a file some software will
+  // refuse to open — the same lie as an object called thumb.jpg holding WebP.
+  assert.match(
+    uploadSource,
+    /const storedFilename = original\s*\n?\s*\? file\.name\.replace\(.*?\) \+ '\.webp'\s*\n?\s*: file\.name;/s,
+    'a compressed original is recorded as .webp; a retouched one keeps its own name'
+  );
+  assert.match(uploadSource, /filename: storedFilename,/, 'and that is what is persisted');
+});
+
+test('a repeated upload cannot leave a trail of empty folders', () => {
+  // Three uploads a minute apart produced three folders called Photos: the
+  // uploader asked for a NEW folder whenever its `folders` prop looked empty,
+  // and that prop only refreshes when a batch succeeds. The server decides it
+  // now, from the rows that actually exist.
+  assert.match(uploaderSource, /ensureDefault: true/, 'the uploader asks for the default folder');
+  assert.ok(
+    !/name: isRetouchedTarget \? 'Retouched' : 'Photos'/.test(uploaderSource),
+    'the client must not be the thing that names and creates it'
+  );
+  const queries = stripComments(readFileSync('src/lib/gallery/queries.ts', 'utf8'));
+  assert.match(queries, /export async function findOrCreateDefaultFolder/);
+  assert.match(
+    queries,
+    /\.eq\('collection_id', collectionId\)\s*\.eq\('is_retouched', isRetouched\)/,
+    'it must look for an existing folder of the right kind before creating one'
   );
 });

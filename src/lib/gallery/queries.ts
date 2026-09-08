@@ -106,6 +106,37 @@ export async function createFolder(
   return data as Folder;
 }
 
+/**
+ * The folder an upload lands in when the photographer hasn't picked one —
+ * "All Photos" on a fresh collection, or Retouched before a retouched folder
+ * exists. Returns the existing default if there is one.
+ *
+ * This is idempotent because the client cannot be. The uploader used to POST
+ * "create me a folder" whenever its `folders` prop was empty, and that prop
+ * only refreshes after a batch finishes — so three upload attempts twenty
+ * seconds apart created three folders called Photos, and a batch that failed
+ * (never calling onDone, never refreshing) created one on every retry. That
+ * is exactly what happened: three Photos folders, two of them empty, from one
+ * broken afternoon. Deciding it on the server from the current rows removes
+ * the race entirely.
+ */
+export async function findOrCreateDefaultFolder(
+  collectionId: string, isRetouched: boolean
+): Promise<Folder> {
+  const client = createAdminClient();
+  const { data, error } = await client
+    .from('folders')
+    .select('id,collection_id,name,is_retouched,sort_order')
+    .eq('collection_id', collectionId)
+    .eq('is_retouched', isRetouched)
+    .order('sort_order', { ascending: true })
+    .limit(1);
+  if (error) throw new Error(`findOrCreateDefaultFolder: ${error.message}`);
+  if (data && data.length > 0) return data[0] as Folder;
+
+  return createFolder(collectionId, isRetouched ? 'Retouched' : 'Photos', isRetouched);
+}
+
 export async function updateFolder(
   id: string, patch: { name?: string; is_retouched?: boolean }
 ): Promise<void> {

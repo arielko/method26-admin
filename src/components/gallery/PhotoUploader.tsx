@@ -56,8 +56,12 @@ export function PhotoUploader({
     try {
       // A photograph has to land in some folder. If the current view has
       // none — "All Photos" on a fresh collection, or Retouched before a
-      // retouched folder exists — create the one this view means, rather
-      // than disabling Upload or quietly filing the frames somewhere else.
+      // retouched folder exists — ask the server for the one this view means.
+      //
+      // ensureDefault, not "create": this component's `folders` prop only
+      // refreshes after a batch finishes, so asking for a new folder every
+      // time it looked empty left one behind on every retry. Three uploads in
+      // one minute produced three folders called Photos.
       let targetFolderId = folderId;
       if (!targetFolderId) {
         const response = await fetch('/api/gallery/folders', {
@@ -65,11 +69,11 @@ export function PhotoUploader({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             collectionId,
-            name: isRetouchedTarget ? 'Retouched' : 'Photos',
+            ensureDefault: true,
             isRetouched: isRetouchedTarget,
           }),
         });
-        if (!response.ok) throw new Error(`Could not create a folder (${response.status})`);
+        if (!response.ok) throw new Error(`Could not open a folder to upload into (${response.status})`);
         const { folder } = (await response.json()) as { folder: { id: string } };
         targetFolderId = folder.id;
       }

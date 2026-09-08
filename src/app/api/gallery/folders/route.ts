@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
-import { createFolder, updateFolder, deleteFolder } from '@/lib/gallery/queries';
+import { createFolder, updateFolder, deleteFolder, findOrCreateDefaultFolder } from '@/lib/gallery/queries';
 
 export async function POST(request: NextRequest) {
   const auth = await authenticateSession(request);
   if (!auth.authenticated) return unauthorizedResponse(auth.error);
 
-  let body: { collectionId?: unknown; name?: unknown; isRetouched?: unknown };
+  let body: { collectionId?: unknown; name?: unknown; isRetouched?: unknown; ensureDefault?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -14,9 +14,24 @@ export async function POST(request: NextRequest) {
   }
 
   const collectionId = typeof body.collectionId === 'string' ? body.collectionId : '';
+  if (!collectionId) {
+    return NextResponse.json({ error: 'collectionId is required' }, { status: 400 });
+  }
+
+  // `ensureDefault` asks for "the folder uploads go in", not "a new folder".
+  // The uploader uses it so a repeated attempt cannot leave a trail of empty
+  // folders behind it — see findOrCreateDefaultFolder.
+  if (body.ensureDefault === true) {
+    return NextResponse.json({
+      folder: await findOrCreateDefaultFolder(collectionId, body.isRetouched === true),
+    });
+  }
+
+  // Everything else is the photographer explicitly making a folder, which is
+  // theirs to name and theirs to have as many of as they like.
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!collectionId || name.length === 0) {
-    return NextResponse.json({ error: 'collectionId and name are required' }, { status: 400 });
+  if (name.length === 0) {
+    return NextResponse.json({ error: 'name is required' }, { status: 400 });
   }
 
   return NextResponse.json({
