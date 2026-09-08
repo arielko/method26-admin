@@ -22,7 +22,14 @@ test('the primitives are never inverted', () => {
   // needs no inversion.
   assert.doesNotMatch(css, /--color-white:\s*#0a0a0a/i, 'white must not be redefined as near-black');
   assert.doesNotMatch(css, /--color-black:\s*#f{3,6}/i, 'black must not be redefined as white');
-  assert.doesNotMatch(css, /html:not\(\.dark\)/, 'the light-mode inversion block must not return');
+  // Assert the INVERSION, not the selector. `html:not(.dark)` is a fine
+  // selector to use for anything else; what must never come back is a block
+  // that redefines the primitives underneath the utilities.
+  assert.doesNotMatch(
+    css,
+    /html:not\(\.dark\)\s*\{[^}]*--color-(white|black)\s*:/,
+    'the light-mode primitive inversion must not return'
+  );
 });
 
 test('base element resets stay inside @layer base', () => {
