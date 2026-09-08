@@ -78,11 +78,23 @@ test('the collections and folders routes authenticate themselves', () => {
 
 test('the galleries routes authenticate themselves', () => {
   for (const route of ['src/app/api/gallery/galleries/route.ts',
-                       'src/app/api/gallery/galleries/[id]/route.ts']) {
+                       'src/app/api/gallery/galleries/[id]/route.ts',
+                       'src/app/api/gallery/galleries/[id]/send/route.ts',
+                       'src/app/api/gallery/galleries/[id]/analytics/route.ts']) {
     assert.equal(existsSync(route), true, `${route} must exist`);
     const source = readFileSync(route, 'utf8');
     assert.ok(source.includes('authenticateSession'), `${route} must authenticate`);
   }
+});
+
+test('the send route resolves the gallery from the URL id, not from the request body', () => {
+  // A caller-chosen galleryId in the body would let one session send mail
+  // "as" any gallery it can name, sidestepping the not-published refusal
+  // and the token that route was scoped to.
+  const source = readFileSync('src/app/api/gallery/galleries/[id]/send/route.ts', 'utf8');
+  assert.ok(!/body\.galleryId|body\[['"]galleryId['"]\]/.test(source),
+    'the route must not read a gallery id from the request body');
+  assert.ok(source.includes('getGallery(id)'), 'the route must resolve the gallery from the URL param');
 });
 
 test('a gallery token is never taken from the request', () => {

@@ -376,20 +376,40 @@ export async function getActivityLast30Days(galleryId: string): Promise<DayActiv
   );
 }
 
-export type GalleryOverviewStats = { views: number; visitors: number; favorites: number; downloads: number };
+export type GalleryOverviewStats = {
+  views: number;
+  visitors: number;
+  favorites: number;
+  downloads: number;
+  emailsSent: number;
+};
 
 // Head-only counts — Postgres/PostgREST return the row count without the
 // rows ever leaving the database, so this stays cheap regardless of a
 // link's traffic.
 export async function getGalleryOverviewStats(galleryId: string): Promise<GalleryOverviewStats> {
   const client = createAdminClient();
-  const [views, visitors, favorites, downloads] = await Promise.all([
+  const [views, visitors, favorites, downloads, emailsSent] = await Promise.all([
     client.from('gallery_views').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
     client.from('gallery_visitors').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
     client.from('gallery_favorites').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
     client.from('gallery_downloads').select('*', { count: 'exact', head: true }).eq('gallery_id', galleryId),
+    // Delivered, not attempted: a failed send didn't reach the client, so
+    // it doesn't belong in a count the studio reads as "how many people
+    // have their photos" — see the Emails Sent tab for the failures too.
+    client
+      .from('gallery_emails')
+      .select('*', { count: 'exact', head: true })
+      .eq('gallery_id', galleryId)
+      .eq('status', 'sent'),
   ]);
-  const labelled = [['views', views], ['visitors', visitors], ['favorites', favorites], ['downloads', downloads]] as const;
+  const labelled = [
+    ['views', views],
+    ['visitors', visitors],
+    ['favorites', favorites],
+    ['downloads', downloads],
+    ['emailsSent', emailsSent],
+  ] as const;
   for (const [label, result] of labelled) {
     if (result.error) throw new Error(`getGalleryOverviewStats(${label}): ${result.error.message}`);
   }
@@ -398,6 +418,7 @@ export async function getGalleryOverviewStats(galleryId: string): Promise<Galler
     visitors: visitors.count ?? 0,
     favorites: favorites.count ?? 0,
     downloads: downloads.count ?? 0,
+    emailsSent: emailsSent.count ?? 0,
   };
 }
 
@@ -530,4 +551,41 @@ export async function listDownloadLog(galleryId: string): Promise<DownloadLogEnt
       downloadedAt: r.downloaded_at,
     };
   });
+}
+
+export type GalleryEmail = {
+  id: string;
+  gallery_id: string;
+  recipient: string;
+  subject: string;
+  status: string;
+  provider_id: string | null;
+  error: string | null;
+  sent_at: string;
+};
+
+// Written by src/lib/gallery/send.ts after every real send attempt,
+// success or failure — the send route is the only writer of this table.
+export async function recordGalleryEmail(row: {
+  gallery_id: string;
+  recipient: string;
+  subject: string;
+  status: 'sent' | 'failed';
+  provider_id?: string | null;
+  error?: string | null;
+}): Promise<void> {
+  const { error } = await createAdminClient().from('gallery_emails').insert(row);
+  if (error) throw new Error(`recordGalleryEmail: ${error.message}`);
+}
+
+// The Emails Sent analytics tab's log — every attempt on this gallery,
+// failures included, newest first.
+export async function listGalleryEmails(galleryId: string): Promise<GalleryEmail[]> {
+  const { data, error } = await createAdminClient()
+    .from('gallery_emails')
+    .select('id,gallery_id,recipient,subject,status,provider_id,error,sent_at')
+    .eq('gallery_id', galleryId)
+    .order('sent_at', { ascending: false });
+  if (error) throw new Error(`listGalleryEmails: ${error.message}`);
+  return data as GalleryEmail[];
 }
