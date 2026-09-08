@@ -41,6 +41,21 @@ export function redactEmails(text: string): string {
   return text.replace(/[^\s<>"']+@[^\s<>"']+\.[^\s<>"',;)]+/g, '<email>');
 }
 
+// `studio@method26.com` or `method26 <studio@method26.com>` — the two shapes
+// Resend accepts. Checked here rather than discovered from a 422, because a
+// misconfigured sender fails identically for every recipient and there is no
+// reason to learn that one round trip at a time.
+//
+// The failure this catches for real: a value pasted into `wrangler secret put`
+// with its surrounding quotes included, which stores a literal `"` inside the
+// address. That is invisible in `wrangler secret list`, which shows only
+// names, and it already cost this project an afternoon on the Supabase keys.
+const FROM_RE = /^(?:[^\s<>@,"']+@[^\s<>@,"']+\.[^\s<>@,"']+|[^<>"']+<[^\s<>@,"']+@[^\s<>@,"']+\.[^\s<>@,"']+>)$/;
+
+export function isValidFromAddress(value: string): boolean {
+  return FROM_RE.test(value.trim());
+}
+
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
 
 export async function sendGalleryEmail(
@@ -57,6 +72,13 @@ export async function sendGalleryEmail(
   // the message points straight at `wrangler secret put`.
   if (!apiKey) throw new Error('Gallery email is not configured: RESEND_API_KEY is unset');
   if (!from) throw new Error('Gallery email is not configured: GALLERY_EMAIL_FROM is unset');
+  if (!isValidFromAddress(from)) {
+    throw new Error(
+      'Gallery email is not configured: GALLERY_EMAIL_FROM must be ' +
+        '`studio@example.com` or `Name <studio@example.com>` — check for stray ' +
+        'quotes around the value, which `wrangler secret put` stores verbatim'
+    );
+  }
 
   try {
     const res = await fetchImpl('https://api.resend.com/emails', {

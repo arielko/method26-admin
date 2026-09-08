@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 delete process.env.RESEND_API_KEY;
 delete process.env.GALLERY_EMAIL_FROM;
 
-const { sendGalleryEmail, redactEmails } = await import('./mail.ts');
+const { sendGalleryEmail, redactEmails, isValidFromAddress } = await import('./mail.ts');
 
 const INPUT = { to: 'client@example.com', galleryName: 'Whitfield Family', url: 'https://method26.example/g/abc123/' };
 
@@ -205,4 +205,43 @@ test('redaction is broad enough for text written by somebody else', () => {
   // costs a leaked address.
   assert.equal(redactEmails('to a@b.co and <c@d.io>, plus e@f.dev.'), 'to <email> and <<email>>, plus <email>');
   assert.equal(redactEmails('nothing here'), 'nothing here');
+});
+
+test('a malformed sender is caught before any recipient is contacted', async () => {
+  // The real failure: Resend answered `Invalid \`from\` field` once per
+  // recipient. A misconfigured sender fails identically for everyone, so
+  // there is no reason to learn it a round trip at a time.
+  process.env.RESEND_API_KEY = 'k';
+  process.env.GALLERY_EMAIL_FROM = '"method26 <studio@method26.com>"';
+  let called = false;
+  await assert.rejects(
+    () =>
+      sendGalleryEmail(INPUT, (async () => {
+        called = true;
+        return new Response('{}', { status: 200 });
+      }) as unknown as typeof fetch),
+    /GALLERY_EMAIL_FROM must be/
+  );
+  assert.equal(called, false, 'nothing may reach the provider');
+});
+
+test('both shapes Resend accepts are accepted here', () => {
+  for (const good of [
+    'studio@method26.com',
+    'method26 <studio@method26.com>',
+    '  method26 <studio@method26.com>  ',
+    'method26 Studio <hello@mail.method26.com>',
+  ]) {
+    assert.ok(isValidFromAddress(good), `${good} should be valid`);
+  }
+  for (const bad of [
+    '"method26 <studio@method26.com>"',   // pasted with its quotes
+    'method26 studio@method26.com',       // no angle brackets
+    'studio@method26',                    // no TLD
+    'method26 <studio@method26.com',      // unclosed
+    '',
+    'method26',
+  ]) {
+    assert.ok(!isValidFromAddress(bad), `${bad} should be rejected`);
+  }
 });
