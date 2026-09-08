@@ -56,6 +56,16 @@ export function isValidFromAddress(value: string): boolean {
   return FROM_RE.test(value.trim());
 }
 
+// The stored value with any address redacted, plus its length — enough to see
+// a stray quote, a missing bracket or invisible whitespace, without the error
+// message reprinting a mailbox.
+export function describeFrom(value: string): string {
+  const shape = redactEmails(value)
+    .replace(/\u00a0/g, '<nbsp>')
+    .replace(/[\r\n\t]/g, '<whitespace>');
+  return `\`${shape}\` (${value.length} characters)`;
+}
+
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
 
 export async function sendGalleryEmail(
@@ -73,10 +83,17 @@ export async function sendGalleryEmail(
   if (!apiKey) throw new Error('Gallery email is not configured: RESEND_API_KEY is unset');
   if (!from) throw new Error('Gallery email is not configured: GALLERY_EMAIL_FROM is unset');
   if (!isValidFromAddress(from)) {
+    // Shows the stored value with the address itself redacted, so the shape
+    // is visible without the message repeating a mailbox. A value pasted with
+    // its surrounding quotes renders as "<email>" and the fault is obvious at
+    // a glance — which is the whole point, because `wrangler secret list`
+    // prints only names and there is otherwise no way to see what is stored.
     throw new Error(
       'Gallery email is not configured: GALLERY_EMAIL_FROM must be ' +
-        '`studio@example.com` or `Name <studio@example.com>` — check for stray ' +
-        'quotes around the value, which `wrangler secret put` stores verbatim'
+        '`studio@example.com` or `Name <studio@example.com>`. ' +
+        `Stored value is ${describeFrom(from)} — if that shows quotes or stray ` +
+        'characters, re-set it: `wrangler secret put GALLERY_EMAIL_FROM` stores ' +
+        'exactly what you paste.'
     );
   }
 

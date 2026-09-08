@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 delete process.env.RESEND_API_KEY;
 delete process.env.GALLERY_EMAIL_FROM;
 
-const { sendGalleryEmail, redactEmails, isValidFromAddress } = await import('./mail.ts');
+const { sendGalleryEmail, redactEmails, isValidFromAddress, describeFrom } = await import('./mail.ts');
 
 const INPUT = { to: 'client@example.com', galleryName: 'Whitfield Family', url: 'https://method26.example/g/abc123/' };
 
@@ -244,4 +244,20 @@ test('both shapes Resend accepts are accepted here', () => {
   ]) {
     assert.ok(!isValidFromAddress(bad), `${bad} should be rejected`);
   }
+});
+
+test('the sender error shows the shape of what is stored, not the mailbox', () => {
+  // `wrangler secret list` prints only names, so without this there is no way
+  // to see what a secret actually contains.
+  assert.equal(
+    describeFrom('"method26 <studio@method26.com>"'),
+    '`"method26 <<email>>"` (32 characters)'
+  );
+  assert.ok(!describeFrom('"method26 <studio@method26.com>"').includes('studio@method26.com'));
+  // Whitespace that is invisible in a terminal is named rather than shown.
+  assert.match(describeFrom('a@b.co\n'), /<whitespace>/);
+  // Written as an escape on purpose: a literal non-breaking space is
+  // invisible in the source, which is exactly why it is worth naming in the
+  // error. I introduced one here by accident while writing this test.
+  assert.match(describeFrom('method26\u00a0<a@b.co>'), /<nbsp>/);
 });
