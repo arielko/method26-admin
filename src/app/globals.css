@@ -21,6 +21,15 @@
        - slate is NEVER text below 32px. It is 4.03:1. Use ink for body copy.
      Photographs are the only real colour on any of these screens; the
      interface recedes. */
+  /* shadcn/tailwind.css (imported above) redefines Tailwind's own `white`
+     to a near-black for its dark theme, so `bg-white` renders #0a0a0a here.
+     Every panel written as bg-white — in this app and in the fork — came out
+     black while the class read as correct, which is why auditing the markup
+     kept concluding it was fine. Pinning the primitives back to their real
+     values fixes every such surface at once. */
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+
   --color-paper: #F6F6F4;
   --color-ink: #141518;
   --color-slate: #727a80;
@@ -61,9 +70,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* In @layer base, not unlayered. Tailwind v4 puts utilities in a layer, and
+   UNLAYERED css beats layered css regardless of specificity — so a bare
+   `a { color: inherit }` silently overrode every text-* utility on a link.
+   That is why the sidebar's active item rendered ink-on-ink while its class
+   list plainly read `bg-ink text-paper`: the class was right and could never
+   take effect. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 /* Hover reveal pattern */
@@ -316,47 +333,18 @@ a {
    CSS variables every utility class references (Tailwind v4). The zinc scale
    is mirrored (300↔700 etc.) and white/black swap, so existing markup needs
    no per-page changes. Toggled by removing the `dark` class from <html>. */
-html:not(.dark) {
-  /* minimal palette */
-  --color-minimal-bg: #ffffff;
-  --color-minimal-border: #e4e4e7;
-  --color-minimal-muted: #6e6e78;
-  --color-minimal-accent: #0a0a0a;
-  --color-minimal-row: #f7f7f8;
-
-  /* core inversions */
-  --color-white: #0a0a0a;
-  --color-black: #ffffff;
-
-  /* mirrored zinc scale, tuned so secondary/meta text stays readable on white */
-  --color-zinc-100: #18181b;
-  --color-zinc-200: #27272a;
-  --color-zinc-300: #3f3f46;
-  --color-zinc-400: #52525b;
-  --color-zinc-500: #6b6b76;
-  --color-zinc-600: #7c7c87;
-  --color-zinc-700: #d4d4d8;
-  --color-zinc-800: #e4e4e7;
-  --color-zinc-900: #f4f4f5;
-
-  /* accents tuned for legibility on white */
-  --color-green-300: #166534;
-  --color-green-400: #16a34a;
-  --color-green-500: #15803d;
-  --color-yellow-400: #a16207;
-  --color-yellow-500: #ca8a04;
-  --color-red-400: #dc2626;
-  --color-violet-400: #7c3aed;
-  --color-blue-400: #2563eb;
-  --color-emerald-300: #047857;
-  --color-emerald-400: #059669;
-  --color-emerald-500: #059669;
-
-  /* status dots (content board) */
-  --color-status-planned: #a1a1aa;
-  --color-status-draft: #a1a1aa;
-  --color-status-archived: #d4d4d8;
-}
+/* REMOVED: the fork's light-mode hack.
+   It lived under `html:not(.dark)` and INVERTED the primitives —
+   --color-white: #0a0a0a, --color-black: #ffffff, plus a mirrored zinc
+   scale — so that markup written for a dark theme rendered correctly in
+   light mode without touching a single class.
+   Deleting the `dark` class from <html> therefore turned it on for every
+   page: `bg-white` painted #0a0a0a, `text-white` painted near-black, and
+   panels came out black with black text. Reading the markup always said
+   the classes were right, because they were; the primitives underneath
+   them were not.
+   method26's palette is light by design, so nothing here needs an
+   inversion. Utilities now mean what they say. */
 
 /* Dark mode legibility tuning — brightens the most-used secondary/meta tones
    a notch above stock zinc so small text reads clearly on pure black. */
