@@ -1,10 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { Plus, Copy, Check, ExternalLink, Send, Settings, Trash2 } from 'lucide-react';
 import type { Gallery, Folder, Photo } from '@/lib/gallery/types';
 import { GallerySettingsPanel } from './GallerySettingsPanel';
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
+
+// A best-effort "send" — this codebase has no transactional email provider
+// wired in (no RESEND/SMTP env, no send-email route), so rather than fake a
+// delivery status this opens the studio's own mail client with the link
+// pre-filled. See the Emails Sent tab in AnalyticsPanel for the same
+// honesty tradeoff.
+function mailtoFor(gallery: Gallery, url: string): string {
+  const subject = `Your photos from method26 are ready`;
+  const body = `Hi,\n\nYour gallery "${gallery.name}" is ready to view:\n${url}\n\n`;
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 export function PublishPanel({
   collectionId,
@@ -81,17 +93,30 @@ export function PublishPanel({
     }
   }
 
+  async function remove(galleryId: string) {
+    if (!confirm('Delete this gallery link? Visitors will no longer be able to open it.')) return;
+    setError(null);
+    try {
+      const response = await fetch(`/api/gallery/galleries/${galleryId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`Could not delete the link (${response.status})`);
+      onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[16px] font-semibold text-ink">Client links</h2>
+        <h2 className="text-[13px] font-medium uppercase tracking-wide text-ink">Published Galleries</h2>
         {!isCreating && (
           <button
             type="button"
             onClick={() => setIsCreating(true)}
-            className="border border-ink px-4 py-2 text-[12px] font-medium uppercase tracking-wide text-ink hover:bg-ink hover:text-paper transition-colors"
+            className="flex items-center gap-1.5 border border-ink px-4 py-2 text-[12px] font-medium uppercase tracking-wide text-ink hover:bg-ink hover:text-paper transition-colors"
           >
-            + New link
+            <Plus className="h-3.5 w-3.5" />
+            New Gallery
           </button>
         )}
       </div>
@@ -99,7 +124,7 @@ export function PublishPanel({
       {isCreating && (
         <form onSubmit={create} className="flex flex-wrap items-end gap-3 border border-stone bg-white p-4">
           <label className="flex flex-1 min-w-[200px] flex-col gap-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-ink">Link name</span>
+            <span className="text-[11px] uppercase tracking-wide text-ink">Gallery name</span>
             <input
               autoFocus
               value={name}
@@ -114,7 +139,7 @@ export function PublishPanel({
             disabled={busy || name.trim().length === 0}
             className="bg-ink px-4 py-2 text-[12px] font-medium uppercase tracking-wide text-paper disabled:opacity-40"
           >
-            {busy ? 'Creating…' : 'Create link'}
+            {busy ? 'Creating…' : 'Create gallery'}
           </button>
           <button
             type="button"
@@ -137,8 +162,8 @@ export function PublishPanel({
 
       {galleries.length === 0 ? (
         <div className="border border-dashed border-stone py-16 text-center">
-          <p className="text-[14px] text-ink">No client links yet.</p>
-          <p className="mt-1 text-[12px] text-ink">Create one to share this shoot.</p>
+          <p className="text-[14px] text-ink">No galleries published yet.</p>
+          <p className="mt-1 text-[12px] text-ink">Create one to share this shoot with the client.</p>
         </div>
       ) : (
         <ul className="flex flex-col gap-4">
@@ -147,24 +172,32 @@ export function PublishPanel({
             const expired =
               gallery.expiration_date !== null && new Date(gallery.expiration_date) <= new Date();
             const hiddenHere = hidden[gallery.id] ?? [];
+            const live = gallery.is_published && !expired;
 
             return (
               <li key={gallery.id} className="border border-stone bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4">
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span
                       aria-hidden
-                      className={`h-2 w-2 shrink-0 ${
-                        gallery.is_published && !expired ? 'bg-amber' : 'bg-stone'
-                      }`}
+                      title={live ? 'Live' : 'Draft'}
+                      className={`h-2 w-2 shrink-0 ${live ? 'bg-amber' : 'bg-stone'}`}
                     />
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="text-[14px] font-semibold text-ink">{gallery.name}</h3>
-                      <p className="mt-0.5 text-[11px] text-ink">{url}</p>
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-ink">{url}</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => patch(gallery.id, { isPublished: !gallery.is_published })}
+                      className="px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide text-ink hover:bg-paper transition-colors"
+                      title={gallery.is_published ? 'Unpublish' : 'Publish'}
+                    >
+                      {gallery.is_published ? 'Live' : 'Draft'}
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -172,24 +205,43 @@ export function PublishPanel({
                         setCopied(gallery.id);
                         setTimeout(() => setCopied((c) => (c === gallery.id ? null : c)), 2000);
                       }}
-                      className="border border-stone px-3 py-1.5 text-[11px] uppercase tracking-wide text-ink hover:border-ink transition-colors"
+                      title="Copy link"
+                      className="p-2 text-ink hover:bg-paper transition-colors"
                     >
-                      {copied === gallery.id ? 'Copied' : 'Copy link'}
+                      {copied === gallery.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => patch(gallery.id, { isPublished: !gallery.is_published })}
-                      className="border border-stone px-3 py-1.5 text-[11px] uppercase tracking-wide text-ink hover:border-ink transition-colors"
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open"
+                      className="p-2 text-ink hover:bg-paper transition-colors"
                     >
-                      {gallery.is_published ? 'Unpublish' : 'Publish'}
-                    </button>
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                    <a
+                      href={mailtoFor(gallery, url)}
+                      title="Send via email"
+                      className="p-2 text-ink hover:bg-paper transition-colors"
+                    >
+                      <Send className="h-4 w-4" />
+                    </a>
                     <button
                       type="button"
                       onClick={() => setOpenSettingsId((cur) => (cur === gallery.id ? null : gallery.id))}
                       aria-expanded={openSettingsId === gallery.id}
-                      className="border border-stone px-3 py-1.5 text-[11px] uppercase tracking-wide text-ink hover:border-ink transition-colors"
+                      title="Settings"
+                      className={`p-2 transition-colors ${openSettingsId === gallery.id ? 'bg-ink text-paper' : 'text-ink hover:bg-paper'}`}
                     >
-                      {openSettingsId === gallery.id ? 'Close settings' : 'Settings'}
+                      <Settings className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(gallery.id)}
+                      title="Delete gallery"
+                      className="p-2 text-red-600 hover:bg-paper transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

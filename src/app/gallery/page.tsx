@@ -1,4 +1,4 @@
-import { listCollections, countPhotosByCollection } from '@/lib/gallery/queries';
+import { listCollections, countPhotosByCollection, getCoverPhotoIds } from '@/lib/gallery/queries';
 import { CollectionsView } from '@/components/gallery/CollectionsView';
 
 // A server component: middleware has already gated this path, so reading
@@ -12,14 +12,19 @@ import { CollectionsView } from '@/components/gallery/CollectionsView';
 export const dynamic = 'force-dynamic';
 
 export default async function GalleryPage() {
-  const [collections, photoCounts] = await Promise.all([
+  const [collections, photoCounts, coverPhotoIds] = await Promise.all([
     listCollections(),
     countPhotosByCollection(),
+    getCoverPhotoIds(),
   ]);
 
   return (
     <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
-      <CollectionsView initialCollections={collections} photoCounts={photoCounts} />
+      <CollectionsView
+        initialCollections={collections}
+        photoCounts={photoCounts}
+        coverPhotoIds={coverPhotoIds}
+      />
     </main>
   );
 }
