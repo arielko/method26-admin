@@ -75,3 +75,39 @@ export function countByVisitor(rows: { visitor_id: string | null }[]): Map<strin
   }
   return counts;
 }
+
+export type DayActivity = { date: string; views: number; downloads: number };
+
+// Buckets raw view/download timestamps into a fixed run of `days` calendar
+// days ending today (UTC, yyyy-mm-dd), oldest first — the shape the
+// Analytics Overview "Last 30 Days" chart draws directly, bar by bar, with
+// every day represented even when it had zero activity (a gap in the chart
+// would otherwise be indistinguishable from a gap in the data).
+export function bucketActivityByDay(
+  views: { viewed_at: string }[],
+  downloads: { downloaded_at: string }[],
+  days = 30,
+  now: Date = new Date()
+): DayActivity[] {
+  const toDateKey = (iso: string) => iso.slice(0, 10);
+  const viewCounts = new Map<string, number>();
+  for (const v of views) {
+    const key = toDateKey(v.viewed_at);
+    viewCounts.set(key, (viewCounts.get(key) ?? 0) + 1);
+  }
+  const downloadCounts = new Map<string, number>();
+  for (const d of downloads) {
+    const key = toDateKey(d.downloaded_at);
+    downloadCounts.set(key, (downloadCounts.get(key) ?? 0) + 1);
+  }
+
+  const result: DayActivity[] = [];
+  const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  cursor.setUTCDate(cursor.getUTCDate() - (days - 1));
+  for (let i = 0; i < days; i++) {
+    const key = cursor.toISOString().slice(0, 10);
+    result.push({ date: key, views: viewCounts.get(key) ?? 0, downloads: downloadCounts.get(key) ?? 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}

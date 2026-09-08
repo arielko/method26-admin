@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankConsensus, groupFavoritesByVisitor, countByVisitor } from './analytics.ts';
+import { rankConsensus, groupFavoritesByVisitor, countByVisitor, bucketActivityByDay } from './analytics.ts';
 
 test('rankConsensus counts distinct visitors per photo, not raw favorite rows', () => {
   const ranked = rankConsensus([
@@ -79,4 +79,35 @@ test('countByVisitor tallies rows per visitor and drops anonymous rows', () => {
 
 test('countByVisitor on no rows returns an empty map', () => {
   assert.equal(countByVisitor([]).size, 0);
+});
+
+test('bucketActivityByDay returns exactly `days` entries, oldest first, ending on `now`', () => {
+  const now = new Date('2026-01-15T12:00:00Z');
+  const buckets = bucketActivityByDay([], [], 5, now);
+  assert.deepEqual(
+    buckets.map((b) => b.date),
+    ['2026-01-11', '2026-01-12', '2026-01-13', '2026-01-14', '2026-01-15']
+  );
+});
+
+test('bucketActivityByDay counts views and downloads into the calendar day they fall on', () => {
+  const now = new Date('2026-01-15T12:00:00Z');
+  const buckets = bucketActivityByDay(
+    [{ viewed_at: '2026-01-14T08:00:00Z' }, { viewed_at: '2026-01-14T23:00:00Z' }, { viewed_at: '2026-01-15T01:00:00Z' }],
+    [{ downloaded_at: '2026-01-15T09:30:00Z' }],
+    5,
+    now
+  );
+  const jan14 = buckets.find((b) => b.date === '2026-01-14')!;
+  const jan15 = buckets.find((b) => b.date === '2026-01-15')!;
+  assert.equal(jan14.views, 2);
+  assert.equal(jan14.downloads, 0);
+  assert.equal(jan15.views, 1);
+  assert.equal(jan15.downloads, 1);
+});
+
+test('bucketActivityByDay fills every day with zero, not a gap, when there is no activity', () => {
+  const buckets = bucketActivityByDay([], [], 3, new Date('2026-01-15T12:00:00Z'));
+  assert.deepEqual(buckets.every((b) => b.views === 0 && b.downloads === 0), true);
+  assert.equal(buckets.length, 3);
 });

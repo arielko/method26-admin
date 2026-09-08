@@ -22,9 +22,12 @@ export type Photo = {
   width: number | null;
   height: number | null;
   sort_order: number;
+  created_at: string;
 };
 
-export type NewPhoto = Omit<Photo, 'id'>;
+// created_at is DB-assigned on insert (see photos.created_at in
+// src/types/database.ts), same as id — never supplied by a caller.
+export type NewPhoto = Omit<Photo, 'id' | 'created_at'>;
 
 export type Gallery = {
   id: string;

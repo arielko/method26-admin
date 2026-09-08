@@ -1,7 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/server';
 import { newGalleryToken } from './token';
 import type { Collection, Folder, Photo, NewPhoto, Gallery, GalleryVisitor } from './types';
-import { rankConsensus, groupFavoritesByVisitor, countByVisitor } from './analytics';
+import { rankConsensus, groupFavoritesByVisitor, countByVisitor, bucketActivityByDay } from './analytics';
+export type { DayActivity } from './analytics';
+import type { DayActivity } from './analytics';
 
 const GALLERY_COLUMNS =
   'id,collection_id,token,name,is_published,expiration_date,cover_photo_id,downloads_enabled,email_capture_enabled';
@@ -127,10 +129,83 @@ export async function getPhotoForImage(
 export async function listPhotos(collectionId: string): Promise<Photo[]> {
   const { data, error } = await createAdminClient()
     .from('photos')
-    .select('id,collection_id,folder_id,filename,thumbnail_key,preview_key,original_key,file_size_bytes,width,height,sort_order')
+    .select('id,collection_id,folder_id,filename,thumbnail_key,preview_key,original_key,file_size_bytes,width,height,sort_order,created_at')
     .eq('collection_id', collectionId).order('sort_order');
   if (error) throw new Error(`listPhotos: ${error.message}`);
   return data as Photo[];
+}
+
+// Used by the collections index to fill each card's cover photograph. There
+// is no cover_photo_id column on collections (only galleries has one) — the
+// cover is simply whichever photo currently sorts first, the same photo the
+// collection detail page's own grid shows first. Pulling id + collection_id
+// + sort_order for every photo and reducing in JS mirrors
+// countPhotosByCollection just above: cheap at this app's scale, and avoids
+// a DISTINCT ON query this app would be the only caller of.
+export async function getCoverPhotoIds(): Promise<Record<string, string>> {
+  const { data, error } = await createAdminClient()
+    .from('photos').select('id,collection_id,sort_order').order('sort_order');
+  if (error) throw new Error(`getCoverPhotoIds: ${error.message}`);
+  const covers: Record<string, string> = {};
+  for (const row of data as { id: string; collection_id: string; sort_order: number }[]) {
+    if (!(row.collection_id in covers)) covers[row.collection_id] = row.id;
+  }
+  return covers;
+}
+
+// Backs the "Change Cover" affordance in the collection detail sidebar.
+// There's no column to point a cover at, so becoming the cover means
+// becoming the photo with the lowest sort_order in the collection — the one
+// getCoverPhotoIds and the grid's own default ordering both already treat
+// as first. One extra read (the current minimum) plus one write; not
+// wrapped in a transaction, matching the rest of this file's style, and
+// safe here because the worst race (two concurrent promotions) just leaves
+// sort_order with a duplicate at the low end, not a lost or corrupted row.
+export async function promotePhotoToFront(photoId: string, collectionId: string): Promise<void> {
+  const client = createAdminClient();
+  const { data, error: readError } = await client
+    .from('photos').select('sort_order').eq('collection_id', collectionId)
+    .order('sort_order', { ascending: true }).limit(1);
+  if (readError) throw new Error(`promotePhotoToFront(read): ${readError.message}`);
+  const currentMin = data.length > 0 ? (data[0] as { sort_order: number }).sort_order : 0;
+  const { error } = await client.from('photos').update({ sort_order: currentMin - 1 }).eq('id', photoId);
+  if (error) throw new Error(`promotePhotoToFront: ${error.message}`);
+}
+
+// Moving between folders, including out to "All Photos" (folderId: null —
+// photos.folder_id is nullable for exactly this).
+export async function movePhotosToFolder(photoIds: string[], folderId: string | null): Promise<void> {
+  if (photoIds.length === 0) return;
+  const { error } = await createAdminClient()
+    .from('photos').update({ folder_id: folderId }).in('id', photoIds);
+  if (error) throw new Error(`movePhotosToFolder: ${error.message}`);
+}
+
+export async function deletePhotos(photoIds: string[]): Promise<void> {
+  if (photoIds.length === 0) return;
+  const { error } = await createAdminClient().from('photos').delete().in('id', photoIds);
+  if (error) throw new Error(`deletePhotos: ${error.message}`);
+  // The B2 objects behind these rows (thumb/preview/original) are left in
+  // place — this app has no delete credential wired up for the bucket, only
+  // signed PUT/GET (see b2.ts). Orphaned storage is the acceptable failure
+  // mode here, not a blocked delete.
+}
+
+// Folders have no ON DELETE behaviour recorded for photos_folder_id_fkey in
+// src/types/database.ts, so this doesn't assume cascade or restrict —
+// photos in the folder are explicitly unfiled (folder_id: null, joining
+// "All Photos") before the folder row itself is removed.
+export async function deleteFolder(id: string): Promise<void> {
+  const client = createAdminClient();
+  const { error: unfileError } = await client.from('photos').update({ folder_id: null }).eq('folder_id', id);
+  if (unfileError) throw new Error(`deleteFolder(unfile): ${unfileError.message}`);
+  const { error } = await client.from('folders').delete().eq('id', id);
+  if (error) throw new Error(`deleteFolder: ${error.message}`);
+}
+
+export async function deleteGallery(id: string): Promise<void> {
+  const { error } = await createAdminClient().from('galleries').delete().eq('id', id);
+  if (error) throw new Error(`deleteGallery: ${error.message}`);
 }
 
 // Each row is inserted the moment its own upload finishes (see
@@ -209,6 +284,18 @@ export async function photoInCollection(photoId: string, collectionId: string): 
   return data !== null;
 }
 
+// Used by the photos PATCH route to check every id in a move/delete/promote
+// request actually belongs to the collection it claims — the same
+// "resolved server-side, never trusted from the caller" pattern as
+// getFolder in the POST route just above.
+export async function photosCollectionIds(photoIds: string[]): Promise<Map<string, string>> {
+  if (photoIds.length === 0) return new Map();
+  const { data, error } = await createAdminClient()
+    .from('photos').select('id,collection_id').in('id', photoIds);
+  if (error) throw new Error(`photosCollectionIds: ${error.message}`);
+  return new Map((data as { id: string; collection_id: string }[]).map((p) => [p.id, p.collection_id]));
+}
+
 export async function setFolderVisibility(
   galleryId: string, folderId: string, isVisible: boolean
 ): Promise<void> {
@@ -268,6 +355,25 @@ async function visitorsByIds(visitorIds: string[]): Promise<Map<string, GalleryV
     .in('id', Array.from(new Set(visitorIds)));
   if (error) throw new Error(`visitorsByIds: ${error.message}`);
   return new Map((data as GalleryVisitor[]).map((v) => [v.id, v]));
+}
+
+// Last 30 calendar days of views and downloads for the Analytics Overview
+// chart. Same "pull the narrow columns, aggregate in JS" approach as the
+// rest of this section — a single client link runs to at most a few hundred
+// rows across 30 days at this studio's scale.
+export async function getActivityLast30Days(galleryId: string): Promise<DayActivity[]> {
+  const client = createAdminClient();
+  const since = new Date(Date.now() - 29 * 86_400_000).toISOString();
+  const [viewsRes, downloadsRes] = await Promise.all([
+    client.from('gallery_views').select('viewed_at').eq('gallery_id', galleryId).gte('viewed_at', since),
+    client.from('gallery_downloads').select('downloaded_at').eq('gallery_id', galleryId).gte('downloaded_at', since),
+  ]);
+  if (viewsRes.error) throw new Error(`getActivityLast30Days(views): ${viewsRes.error.message}`);
+  if (downloadsRes.error) throw new Error(`getActivityLast30Days(downloads): ${downloadsRes.error.message}`);
+  return bucketActivityByDay(
+    viewsRes.data as { viewed_at: string }[],
+    downloadsRes.data as { downloaded_at: string }[]
+  );
 }
 
 export type GalleryOverviewStats = { views: number; visitors: number; favorites: number; downloads: number };

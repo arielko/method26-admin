@@ -4,6 +4,7 @@ import { isAnalyticsTab } from '@/lib/gallery/analytics-tab';
 import {
   getGallery,
   getGalleryOverviewStats,
+  getActivityLast30Days,
   listFavoritesByVisitor,
   getConsensusRanking,
   listVisitorsWithActivity,
@@ -41,8 +42,13 @@ export async function GET(
   if (!gallery) return NextResponse.json({ error: 'gallery not found' }, { status: 404 });
 
   switch (tab) {
-    case 'overview':
-      return NextResponse.json({ stats: await getGalleryOverviewStats(id) });
+    case 'overview': {
+      const [stats, activity30d] = await Promise.all([
+        getGalleryOverviewStats(id),
+        getActivityLast30Days(id),
+      ]);
+      return NextResponse.json({ stats, activity30d });
+    }
     case 'favorites':
       return NextResponse.json({
         groups: await listFavoritesByVisitor(id),

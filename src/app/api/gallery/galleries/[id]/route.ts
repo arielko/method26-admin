@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
-import { getGallery, updateGallery, photoInCollection } from '@/lib/gallery/queries';
+import { getGallery, updateGallery, deleteGallery, photoInCollection } from '@/lib/gallery/queries';
 
 export async function PATCH(
   request: NextRequest,
@@ -86,5 +86,20 @@ export async function PATCH(
   }
 
   await updateGallery(id, patch);
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await authenticateSession(request);
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
+
+  const { id } = await params;
+  const gallery = await getGallery(id);
+  if (!gallery) return NextResponse.json({ error: 'gallery not found' }, { status: 404 });
+
+  await deleteGallery(id);
   return NextResponse.json({ ok: true });
 }

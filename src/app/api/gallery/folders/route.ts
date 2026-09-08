@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
-import { createFolder, updateFolder } from '@/lib/gallery/queries';
+import { createFolder, updateFolder, deleteFolder } from '@/lib/gallery/queries';
 
 export async function POST(request: NextRequest) {
   const auth = await authenticateSession(request);
@@ -50,5 +50,25 @@ export async function PATCH(request: NextRequest) {
   }
 
   await updateFolder(id, patch);
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await authenticateSession(request);
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
+
+  let body: { id?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const id = typeof body.id === 'string' ? body.id : '';
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+  // Its photos are unfiled (folder_id: null), not deleted — see
+  // deleteFolder in queries.ts.
+  await deleteFolder(id);
   return NextResponse.json({ ok: true });
 }
