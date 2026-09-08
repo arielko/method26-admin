@@ -1,8 +1,18 @@
+import { buildGalleryShareEmailHtml, buildGalleryShareEmailText, type GalleryEmailVariant } from './email-templates.ts';
+
 // Delivers via Resend's HTTP API rather than its SDK — one POST, no
 // dependency, same approach the public site takes for inquiry mail (see
-// ../_Website/src/lib/mail.ts). Plain text only: no HTML template means no
-// tracking pixel and no image loaded from anywhere else, and a gallery
-// link doesn't need a layout to read clearly.
+// ../_Website/src/lib/mail.ts).
+//
+// Sends multipart: the branded HTML from ./email-templates plus a plain-text
+// alternative. Both, not either — a message with no text part is markedly
+// more likely to be filed as spam, and the text version is what a screen
+// reader and a watch notification actually read.
+//
+// The template loads exactly one remote image, the studio's own logo, and
+// optionally the gallery's cover photograph. No tracking pixel, no third-party
+// asset: this mail carries a credential, and a request to somebody else's
+// server on open is a request that leaks when it was opened and from where.
 
 export type SendGalleryEmailInput = {
   to: string;
@@ -11,39 +21,13 @@ export type SendGalleryEmailInput = {
   message?: string;
   /** ISO timestamp. Omitted or null means the link has no expiry. */
   expiresAt?: string | null;
+  /** Absolute URL of the gallery's cover photograph, used as the hero. */
+  coverImageUrl?: string | null;
+  /** 'finals' changes the heading and the call to action to a download. */
+  variant?: GalleryEmailVariant;
 };
 
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
-
-function buildBody(input: SendGalleryEmailInput): string {
-  const lines = [`Hi,`, ``, `Your photographs from ${input.galleryName} are ready to view.`, ``];
-
-  const message = input.message?.trim();
-  if (message) {
-    lines.push(message, ``);
-  }
-
-  lines.push(`View your gallery: ${input.url}`, ``);
-
-  // The token in that link is the only thing standing between this
-  // gallery and anyone who has the URL — see src/lib/gallery/token.ts.
-  // Said once, plainly, rather than assumed.
-  lines.push(
-    `This link is the only credential protecting your gallery — please don't forward it to anyone you don't want to have access.`
-  );
-
-  if (input.expiresAt) {
-    const formatted = new Date(input.expiresAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-    lines.push(`This link expires ${formatted}.`);
-  }
-
-  lines.push(``, `— method26 Studio`);
-  return lines.join('\n');
-}
 
 export async function sendGalleryEmail(
   input: SendGalleryEmailInput,
@@ -70,8 +54,25 @@ export async function sendGalleryEmail(
       body: JSON.stringify({
         from,
         to: [input.to],
-        subject: `Your photos from method26 are ready`,
-        text: buildBody(input),
+        subject:
+          input.variant === 'finals'
+            ? 'Your final photographs from method26 are ready'
+            : 'Your photos from method26 are ready',
+        html: buildGalleryShareEmailHtml({
+          galleryName: input.galleryName,
+          url: input.url,
+          message: input.message,
+          coverImageUrl: input.coverImageUrl,
+          expiresAt: input.expiresAt,
+          variant: input.variant,
+        }),
+        text: buildGalleryShareEmailText({
+          galleryName: input.galleryName,
+          url: input.url,
+          message: input.message,
+          expiresAt: input.expiresAt,
+          variant: input.variant,
+        }),
       }),
     });
 

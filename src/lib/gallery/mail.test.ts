@@ -54,8 +54,11 @@ test('sends through Resend and returns the provider id on success', async () => 
   const body = JSON.parse(capturedInit?.body as string);
   assert.equal(body.from, 'method26 Studio <studio@method26.com>');
   assert.deepEqual(body.to, ['client@example.com']);
-  assert.ok(typeof body.text === 'string' && body.text.length > 0);
-  assert.equal(body.html, undefined);
+  // Multipart: the branded template plus a plain-text alternative. Both are
+  // required — a message with no text part is markedly more likely to be
+  // filed as spam.
+  assert.ok(typeof body.text === 'string' && body.text.length > 0, 'text part must be present');
+  assert.ok(typeof body.html === 'string' && body.html.includes('<!DOCTYPE html>'), 'html part must be present');
 
   delete process.env.RESEND_API_KEY;
   delete process.env.GALLERY_EMAIL_FROM;
@@ -66,14 +69,37 @@ test('the body is plain text: the gallery link, and one line naming it as the cr
     process.env.RESEND_API_KEY = 'test-key';
     process.env.GALLERY_EMAIL_FROM = 'studio@method26.com';
     let text = '';
+    let html = '';
     const fetchImpl = (async (_url: string, init?: RequestInit) => {
-      text = JSON.parse((init?.body as string) ?? '{}').text;
+      const sent = JSON.parse((init?.body as string) ?? '{}');
+      text = sent.text;
+      html = sent.html;
       return new Response(JSON.stringify({ id: 'x' }), { status: 200 });
     }) as typeof fetch;
     await sendGalleryEmail(INPUT, fetchImpl);
-    assert.ok(text.includes(INPUT.url), 'body must include the gallery link');
-    assert.ok(/credential/i.test(text), 'body must say the link is the credential, in one line');
-    assert.ok(!/<img|<html|tracking/i.test(text), 'body must not carry markup, images, or tracking');
+
+    // Both parts, always. A message with no text alternative is markedly more
+    // likely to be filed as spam, and the text part is what a screen reader
+    // and a watch notification actually read.
+    assert.ok(text.includes(INPUT.url), 'text part must include the gallery link');
+    assert.ok(html.includes(INPUT.url), 'html part must include the gallery link');
+    assert.ok(/credential/i.test(text), 'text part must say the link is the credential');
+    assert.ok(/credential/i.test(html), 'html part must say the link is the credential');
+
+    // The text alternative stays plain — that is the point of having one.
+    assert.ok(!/<[a-z]/i.test(text), 'text part must carry no markup');
+
+    // This mail carries a credential. A request to somebody else's server on
+    // open reveals when it was opened and from where, so the only remote
+    // images permitted are the studio's own and the gallery's cover.
+    const remote = [...html.matchAll(/(?:src|background)=\"(https?:[^\"]+)\"/gi)].map((m) => m[1]);
+    for (const url of remote) {
+      assert.ok(
+        /^https:\/\/method26\.|^https:\/\/method26-admin\.|backblazeb2\.com/.test(url),
+        `html must not load a third-party asset: ${url}`
+      );
+    }
+    assert.ok(!/tracking|pixel|open\.gif|1x1/i.test(html), 'html must carry no tracking pixel');
     delete process.env.RESEND_API_KEY;
     delete process.env.GALLERY_EMAIL_FROM;
   });
@@ -93,9 +119,10 @@ test('includes an expiry line only when the gallery has one', async () => {
     return text;
   }
 
-  assert.ok(!/expires/i.test(await bodyTextFor(undefined)));
-  assert.ok(!/expires/i.test(await bodyTextFor(null)));
-  assert.ok(/expires/i.test(await bodyTextFor('2026-12-25T00:00:00.000Z')));
+  const EXPIRY = /available until/i;
+  assert.ok(!EXPIRY.test(await bodyTextFor(undefined)), 'no expiry line when there is no expiry');
+  assert.ok(!EXPIRY.test(await bodyTextFor(null)), 'no expiry line when expiry is null');
+  assert.ok(EXPIRY.test(await bodyTextFor('2026-12-25T00:00:00.000Z')), 'expiry line when the gallery has one');
 
   delete process.env.RESEND_API_KEY;
   delete process.env.GALLERY_EMAIL_FROM;
