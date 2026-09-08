@@ -246,18 +246,36 @@ test('both shapes Resend accepts are accepted here', () => {
   }
 });
 
-test('the sender error shows the shape of what is stored, not the mailbox', () => {
-  // `wrangler secret list` prints only names, so without this there is no way
-  // to see what a secret actually contains.
-  assert.equal(
-    describeFrom('"method26 <studio@method26.com>"'),
-    '`"method26 <<email>>"` (32 characters)'
-  );
-  assert.ok(!describeFrom('"method26 <studio@method26.com>"').includes('studio@method26.com'));
-  // Whitespace that is invisible in a terminal is named rather than shown.
-  assert.match(describeFrom('a@b.co\n'), /<whitespace>/);
-  // Written as an escape on purpose: a literal non-breaking space is
-  // invisible in the source, which is exactly why it is worth naming in the
-  // error. I introduced one here by accident while writing this test.
-  assert.match(describeFrom('method26\u00a0<a@b.co>'), /<nbsp>/);
+test('the sender error describes the shape and never echoes the value', () => {
+  // The bug this replaces: the first version printed the stored value with
+  // email addresses redacted, reasoning that a sender address is the studio's
+  // own. But this message only appears when the value is NOT an address — so
+  // that assumption fails precisely when it matters. The real value turned out
+  // to be a Resend API key, and the admin displayed it in full.
+  const key = 're_' + 'A'.repeat(33);
+  const described = describeFrom(key);
+  assert.ok(!described.includes(key), 'the value must never appear');
+  assert.ok(!described.includes('A'.repeat(8)), 'nor any run of it');
+  assert.match(described, /looks like a Resend API key/, 'but the fault is named');
+  assert.match(described, /36 characters/);
+
+  const quoted = describeFrom('"method26 <studio@method26.com>"');
+  assert.ok(!quoted.includes('studio'), 'no mailbox either');
+  assert.ok(!quoted.includes('method26.com'), 'nor a domain');
+  assert.match(quoted, /is wrapped in quotes/);
+
+  assert.match(describeFrom('a@b.co\n'), /line break/);
+  assert.match(describeFrom('method26\u00a0<a@b.co>'), /non-breaking space/);
+  assert.match(describeFrom('method26 <a@b.co'), /unmatched angle bracket/);
+  assert.match(describeFrom('method26'), /has no @/);
+});
+
+test('no secret-shaped value can be echoed by the sender error', () => {
+  // A blunt sweep: whatever is stored, none of it comes back out.
+  for (const value of ['re_liveKey123456', '"quoted@x.co"', 'sk-abcdef', 'Bearer abc.def.ghi']) {
+    const out = describeFrom(value);
+    for (const chunk of value.match(/[A-Za-z0-9]{4,}/g) ?? []) {
+      assert.ok(!out.includes(chunk), `${chunk} leaked into: ${out}`);
+    }
+  }
 });

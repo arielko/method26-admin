@@ -56,14 +56,29 @@ export function isValidFromAddress(value: string): boolean {
   return FROM_RE.test(value.trim());
 }
 
-// The stored value with any address redacted, plus its length — enough to see
-// a stray quote, a missing bracket or invisible whitespace, without the error
-// message reprinting a mailbox.
+// Describes the SHAPE of a misconfigured value and never its content.
+//
+// The first version of this printed the stored value with email addresses
+// redacted, on the reasoning that a sender address is the studio's own and
+// safe to show. That reasoning is exactly backwards: this message is only
+// ever produced when the value is NOT an address, so "it is an address" is
+// the one thing that cannot be assumed. In practice the value turned out to
+// be the Resend API key — pasted into the wrong prompt — and the admin UI
+// displayed it in full.
+//
+// So: lengths and character classes only. Enough to identify a stray quote,
+// a missing bracket or invisible whitespace; never enough to learn a secret.
 export function describeFrom(value: string): string {
-  const shape = redactEmails(value)
-    .replace(/\u00a0/g, '<nbsp>')
-    .replace(/[\r\n\t]/g, '<whitespace>');
-  return `\`${shape}\` (${value.length} characters)`;
+  const traits: string[] = [];
+  if (/^["']|["']$/.test(value)) traits.push('is wrapped in quotes');
+  if (!value.includes('@')) traits.push('has no @');
+  if (value.includes('<') !== value.includes('>')) traits.push('has an unmatched angle bracket');
+  if (/[\r\n\t]/.test(value)) traits.push('contains a line break or tab');
+  if (/\u00a0/.test(value)) traits.push('contains a non-breaking space');
+  if (/^re_/.test(value)) traits.push('looks like a Resend API key, not an address');
+  return traits.length > 0
+    ? `${value.length} characters; it ${traits.join(', ')}`
+    : `${value.length} characters`;
 }
 
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
@@ -91,9 +106,8 @@ export async function sendGalleryEmail(
     throw new Error(
       'Gallery email is not configured: GALLERY_EMAIL_FROM must be ' +
         '`studio@example.com` or `Name <studio@example.com>`. ' +
-        `Stored value is ${describeFrom(from)} — if that shows quotes or stray ` +
-        'characters, re-set it: `wrangler secret put GALLERY_EMAIL_FROM` stores ' +
-        'exactly what you paste.'
+        `The stored value is ${describeFrom(from)}. Re-set it with ` +
+        '`wrangler secret put GALLERY_EMAIL_FROM` — it stores exactly what you paste.'
     );
   }
 
