@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
 import { getGallery } from '@/lib/gallery/queries';
 import { buildGalleryShareEmailHtml, type GalleryEmailVariant } from '@/lib/gallery/email-templates';
-import { galleryUrl } from '@/lib/gallery/site-url';
+import { urlForVariant } from '@/lib/gallery/site-url';
 
 // Renders the email exactly as it will be sent, so the share screen's preview
 // is the real template rather than a second hand-built approximation of it.
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const html = buildGalleryShareEmailHtml({
     galleryName: gallery.name,
-    url: galleryUrl(gallery.token),
+    url: urlForVariant(gallery.token, body.variant as GalleryEmailVariant | undefined),
     message: typeof body.message === 'string' ? body.message : undefined,
     expiresAt: gallery.expiration_date,
     variant: (body.variant as GalleryEmailVariant | undefined) ?? 'proofing',

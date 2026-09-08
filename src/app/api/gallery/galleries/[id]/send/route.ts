@@ -8,7 +8,7 @@ import {
 } from '@/lib/gallery/queries';
 import { sendGalleryEmail } from '@/lib/gallery/mail';
 import { sendGalleryLinks } from '@/lib/gallery/send';
-import { galleryUrl } from '@/lib/gallery/site-url';
+import { urlForVariant } from '@/lib/gallery/site-url';
 import type { GalleryEmailVariant } from '@/lib/gallery/email-templates';
 
 // Sends a gallery link to one or more clients and logs every attempt — see
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     result = await sendGalleryLinks(
       gallery,
-      galleryUrl(gallery.token),
+      urlForVariant(gallery.token, body.variant as GalleryEmailVariant | undefined),
       {
         recipients,
         subject: typeof body.subject === 'string' ? body.subject : undefined,
