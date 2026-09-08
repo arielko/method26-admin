@@ -78,6 +78,9 @@
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://hyfcsqrwlolkkxopmcqj.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5ZmNzcXJ3bG9sa2t4b3BtY3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MzEwMzcsImV4cCI6MjEwNDMwNzAzN30.VvzM1RAwEjZdDiJLeQWqdmlBefA-bhGMY1283Cnbb5o",
-    "NEXT_PUBLIC_SITE_URL": "https://method26.com"
+    // The public gallery site has no custom domain yet — method26.com still
+    // serves the old WordPress site, so every share link built from that
+    // value 404'd. It actually lives at its own workers.dev URL.
+    "NEXT_PUBLIC_SITE_URL": "https://method26.intellidot.workers.dev"
   }
 }
