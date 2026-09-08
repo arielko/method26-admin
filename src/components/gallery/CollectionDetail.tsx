@@ -116,14 +116,22 @@ export function CollectionDetail({
     return sorted;
   }, [visiblePhotos, sortBy]);
 
-  // Every photo needs a folder_id at creation (see the photos POST route).
-  // The toolbar's Upload button targets the active real folder if one is
-  // selected, or the collection's default (first) folder otherwise — never
-  // the virtual Retouched entry, which isn't a folder photos can land in.
-  // If the collection has no folder at all yet, PhotoUploader itself
-  // creates one on demand rather than the control disabling itself.
+  // Every photo needs a folder_id at creation (see the photos POST route),
+  // and the Retouched entry in the sidebar is a filter across every
+  // is_retouched folder rather than a folder of its own — so it has no id to
+  // upload into.
+  //
+  // It used to fall through to `folders[0]`, which is the collection's first
+  // ordinary folder: uploading while the Retouched view was open filed the
+  // retouched frames into the proofing folder, where the client's delivery
+  // page would never show them. The Retouched view now targets a retouched
+  // folder, and PhotoUploader creates one when there isn't one yet.
+  const isRetouchedTarget =
+    activeFolderId === RETOUCHED_FILTER || activeFolder?.is_retouched === true;
   const uploadFolderId =
-    activeFolderId && activeFolderId !== RETOUCHED_FILTER ? activeFolderId : folders[0]?.id;
+    activeFolderId === RETOUCHED_FILTER
+      ? folders.find((f) => f.is_retouched)?.id
+      : (activeFolderId ?? folders.find((f) => !f.is_retouched)?.id);
 
   async function setCoverFromDrop(photoId: string) {
     setError(null);
@@ -238,7 +246,12 @@ export function CollectionDetail({
           <div className="flex flex-wrap items-center gap-2">
             {view === 'photos' && (
               <>
-                <PhotoUploader collectionId={collection.id} folderId={uploadFolderId} onDone={onChanged} />
+                <PhotoUploader
+                  collectionId={collection.id}
+                  folderId={uploadFolderId}
+                  isRetouchedTarget={isRetouchedTarget}
+                  onDone={onChanged}
+                />
 
                 <div className="relative">
                   <button
