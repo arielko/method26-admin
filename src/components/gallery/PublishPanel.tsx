@@ -4,19 +4,9 @@ import { useState } from 'react';
 import { Plus, Copy, Check, ExternalLink, Send, Settings, Trash2 } from 'lucide-react';
 import type { Gallery, Folder, Photo } from '@/lib/gallery/types';
 import { GallerySettingsPanel } from './GallerySettingsPanel';
+import { SendGalleryPanel } from './SendGalleryPanel';
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
-
-// A best-effort "send" — this codebase has no transactional email provider
-// wired in (no RESEND/SMTP env, no send-email route), so rather than fake a
-// delivery status this opens the studio's own mail client with the link
-// pre-filled. See the Emails Sent tab in AnalyticsPanel for the same
-// honesty tradeoff.
-function mailtoFor(gallery: Gallery, url: string): string {
-  const subject = `Your photos from method26 are ready`;
-  const body = `Hi,\n\nYour gallery "${gallery.name}" is ready to view:\n${url}\n\n`;
-  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
 
 export function PublishPanel({
   collectionId,
@@ -39,6 +29,7 @@ export function PublishPanel({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [openSettingsId, setOpenSettingsId] = useState<string | null>(null);
+  const [openSendId, setOpenSendId] = useState<string | null>(null);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -219,13 +210,15 @@ export function PublishPanel({
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>
-                    <a
-                      href={mailtoFor(gallery, url)}
+                    <button
+                      type="button"
+                      onClick={() => setOpenSendId((cur) => (cur === gallery.id ? null : gallery.id))}
+                      aria-expanded={openSendId === gallery.id}
                       title="Send via email"
-                      className="p-2 text-ink hover:bg-paper transition-colors"
+                      className={`p-2 transition-colors ${openSendId === gallery.id ? 'bg-ink text-paper' : 'text-ink hover:bg-paper'}`}
                     >
                       <Send className="h-4 w-4" />
-                    </a>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setOpenSettingsId((cur) => (cur === gallery.id ? null : gallery.id))}
@@ -263,6 +256,10 @@ export function PublishPanel({
                   <span>{gallery.downloads_enabled ? 'Downloads on' : 'Downloads off'}</span>
                   <span>{gallery.email_capture_enabled ? 'Email capture on' : 'Email capture off'}</span>
                 </div>
+
+                {openSendId === gallery.id && (
+                  <SendGalleryPanel gallery={gallery} onClose={() => setOpenSendId(null)} />
+                )}
 
                 {openSettingsId === gallery.id && (
                   <GallerySettingsPanel
