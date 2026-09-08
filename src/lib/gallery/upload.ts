@@ -16,6 +16,16 @@ export type UploadResult = {
   failed: { filename: string; error: string }[];
 };
 
+// Carries the status so the caller can tell "B2 answered and refused" from
+// "the browser never got an answer" — only the second is worth retrying
+// through the proxy.
+export class UploadError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'UploadError';
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -38,14 +48,18 @@ function put(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`B2 rejected the upload (${xhr.status})`));
+      else reject(new UploadError(`B2 rejected the upload (${xhr.status})`, xhr.status));
     };
-    // A CORS failure surfaces here with no status, not as an HTTP error — if
-    // uploads fail this way, the bucket's CORS rule is missing, not the
-    // signature.
+    // Status 0, no body, no headers. B2's error responses carry no
+    // Access-Control-Allow-Origin, so a refused request and an unreachable
+    // one arrive here identically — a wrong signature, a missing CORS rule
+    // and a dropped connection are the same event from in here. This message
+    // used to assert it was the CORS rule; it was, in fact, a signature
+    // mismatch, and the wrong claim cost real debugging time. Say what is
+    // known and let the proxy fallback settle it.
     xhr.onerror = () =>
-      reject(new Error('Could not reach B2 — check the bucket CORS rule for this origin'));
-    xhr.onabort = () => reject(new Error('Upload aborted'));
+      reject(new UploadError('The browser could not complete the upload to B2', 0));
+    xhr.onabort = () => reject(new UploadError('Upload aborted', 0));
     xhr.send(body);
   });
 }
@@ -72,6 +86,34 @@ async function putWithRetry(
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+// Same-origin, so CORS plays no part. Used only when the direct PUT could not
+// be completed at all — mirrors the proxy path in the Argento system this is
+// modelled on.
+async function putViaProxy(
+  collectionId: string,
+  photoId: string,
+  extension: string,
+  variant: 'thumbnail' | 'preview' | 'original',
+  body: Blob,
+  contentType: string
+): Promise<void> {
+  const form = new FormData();
+  form.append('collectionId', collectionId);
+  form.append('photoId', photoId);
+  form.append('extension', extension);
+  form.append('variant', variant);
+  form.append('file', new File([body], `${variant}`, { type: contentType }));
+
+  const response = await fetch('/api/gallery/upload', { method: 'POST', body: form });
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((d: { error?: string }) => d.error)
+      .catch(() => null);
+    throw new Error(detail || `Proxy upload failed (${response.status})`);
+  }
 }
 
 export type UploadOptions = {
@@ -158,16 +200,38 @@ export async function uploadPhotos(
       // Sequential, not parallel: the original can be tens of megabytes, and
       // three concurrent large PUTs per photo across a 300-frame shoot
       // saturates an ordinary connection and makes progress meaningless.
+      // Direct to B2 first — the bytes never touch our Worker. If the browser
+      // could not complete it at all (status 0: CORS, a refused signature, a
+      // dropped connection — indistinguishable from here), retry the same
+      // object through the same-origin proxy, where none of those apply.
+      // A real HTTP status from B2 is not retried this way: it answered, and
+      // it will answer the proxy the same.
+      const send = async (
+        variant: 'thumbnail' | 'preview' | 'original',
+        url: string,
+        body: Blob,
+        type: string,
+        onFraction: (fraction: number) => void
+      ) => {
+        try {
+          await putWithRetry(url, body, type, onFraction);
+        } catch (error) {
+          if (error instanceof UploadError && error.status !== 0) throw error;
+          await putViaProxy(collectionId, photoId, extension, variant, body, type);
+          onFraction(1);
+        }
+      };
+
       let base = DERIVE;
-      await putWithRetry(urls.thumbnail, thumbnail, 'image/webp', (f) =>
+      await send('thumbnail', urls.thumbnail, thumbnail, 'image/webp', (f) =>
         report(file.name, (base + THUMB * f) * 100)
       );
       base += THUMB;
-      await putWithRetry(urls.preview, preview, 'image/webp', (f) =>
+      await send('preview', urls.preview, preview, 'image/webp', (f) =>
         report(file.name, (base + PREVIEW * f) * 100)
       );
       base += PREVIEW;
-      await putWithRetry(urls.original, originalBlob, originalContentType, (f) =>
+      await send('original', urls.original, originalBlob, originalContentType, (f) =>
         report(file.name, (base + ORIGINAL * f) * 100)
       );
 

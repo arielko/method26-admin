@@ -6,6 +6,7 @@ import {
   buildGalleryShareEmailText,
   escapeHtml,
   formatExpiryDate,
+  GALLERY_EMAIL_DEFAULTS,
   sanitizeUrl,
 } from './email-templates.ts';
 
@@ -68,12 +69,27 @@ test('both parts carry the same expiry wording', () => {
   assert.ok(buildGalleryShareEmailText(input).includes('Available until December 25, 2026.'));
 });
 
-test('the finals variant asks the client to download, proofing asks them to choose', () => {
+test('the finals variant asks the client to download, proofing asks them to view', () => {
   const finals = buildGalleryShareEmailHtml({ ...GALLERY, variant: 'finals' });
   const proofing = buildGalleryShareEmailHtml({ ...GALLERY, variant: 'proofing' });
-  assert.ok(finals.includes('Download photographs'));
-  assert.ok(proofing.includes('View gallery'));
-  assert.ok(!proofing.includes('Download photographs'));
+  assert.ok(finals.includes(GALLERY_EMAIL_DEFAULTS.finals.cta));
+  assert.ok(proofing.includes(GALLERY_EMAIL_DEFAULTS.proofing.cta));
+  assert.ok(!proofing.includes(GALLERY_EMAIL_DEFAULTS.finals.cta));
+});
+
+test('the header carries the lockup, not the word repeated beneath it', () => {
+  const html = buildGalleryShareEmailHtml(GALLERY);
+  assert.match(html, /email-logo\.png/, 'the lockup PNG — Gmail and Outlook render no SVG');
+  assert.match(html, /alt="method26"/, 'alt does the work when images are blocked');
+  // The lockup already reads "method26"; setting it again as text beneath is
+  // the thing being removed here.
+  // Sliced to the first heading: the hero comment only exists when the
+  // gallery has a cover, and this fixture has none.
+  const header = html.slice(html.indexOf('<!-- Header -->'), html.indexOf('<h1'));
+  assert.ok(
+    !/>\s*method26\s*</.test(header),
+    'the wordmark must not be repeated as text under the logo'
+  );
 });
 
 test('the message block is omitted entirely when there is no message', () => {

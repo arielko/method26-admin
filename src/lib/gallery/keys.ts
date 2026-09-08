@@ -20,13 +20,19 @@ export function objectKeys(collectionId: string, photoId: string, extension: str
   }
   const prefix = `${collectionId}/${photoId}`;
   return {
-    thumbnail_key: `${prefix}/thumb.jpg`,
-    preview_key: `${prefix}/preview.jpg`,
+    // .webp because that is what derivatives.ts encodes. The name has to
+    // follow the bytes: an object called thumb.jpg holding WebP is a lie that
+    // survives every code review and only shows up when somebody downloads it.
+    thumbnail_key: `${prefix}/thumb.webp`,
+    preview_key: `${prefix}/preview.webp`,
     original_key: `${prefix}/original${extension}`,
   };
 }
 
-const KEY_PATTERN = /^([^/]+)\/([^/]+)\/(thumb\.jpg|preview\.jpg|original\.[a-z0-9]+)$/i;
+// .jpg is still accepted: every photograph uploaded before the WebP switch
+// has thumb.jpg / preview.jpg keys pointing at real objects, and those rows
+// must keep validating.
+const KEY_PATTERN = /^([^/]+)\/([^/]+)\/(thumb\.(?:jpg|webp)|preview\.(?:jpg|webp)|original\.[a-z0-9]+)$/i;
 
 // The inverse of objectKeys, used to check a key a caller hands back
 // against the layout the server actually minted — see photoKeysMatchLayout.
@@ -46,7 +52,11 @@ export function photoKeysMatchLayout(collectionId: string, keys: ObjectKeys): bo
   const preview = parseObjectKey(keys.preview_key);
   const original = parseObjectKey(keys.original_key);
   if (!thumbnail || !preview || !original) return false;
-  if (thumbnail.name !== 'thumb.jpg' || preview.name !== 'preview.jpg' || !original.name.startsWith('original.')) {
+  if (
+    !/^thumb\.(jpg|webp)$/i.test(thumbnail.name) ||
+    !/^preview\.(jpg|webp)$/i.test(preview.name) ||
+    !original.name.startsWith('original.')
+  ) {
     return false;
   }
   if (thumbnail.collectionId !== collectionId || preview.collectionId !== collectionId || original.collectionId !== collectionId) {

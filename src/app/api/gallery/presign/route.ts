@@ -24,6 +24,10 @@ const IMAGE_CONTENT_TYPES = new Set([
   'image/tiff',
 ]);
 
+// The one place the derivative type is stated. upload.ts PUTs with this and
+// derivatives.ts encodes to it; a test pins all three together.
+export const DERIVATIVE_CONTENT_TYPE = 'image/webp';
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXTENSION_RE = /^\.[a-z0-9]{1,5}$/i;
 
@@ -74,12 +78,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Thumbnail and preview are always JPEG — that's not the caller's
+    // Thumbnail and preview are always WebP — that's not the caller's
     // choice, it's what derivatives.ts produces, so their content type is
     // never taken from the request.
+    //
+    // It MUST match what the browser actually PUTs. A SigV4 presigned URL
+    // signs the content type, so signing image/jpeg while the client sends
+    // image/webp makes B2 refuse with SignatureDoesNotMatch — and B2's error
+    // response carries no Access-Control-Allow-Origin, so the browser hands
+    // XHR a status-0 onerror that looks exactly like a missing CORS rule.
+    // That is precisely how switching derivatives to WebP broke every upload
+    // while pointing the blame at the bucket. See DERIVATIVE_CONTENT_TYPE.
     const [thumbnail, preview, original] = await Promise.all([
-      signedPutUrl(keys.thumbnail_key, 'image/jpeg'),
-      signedPutUrl(keys.preview_key, 'image/jpeg'),
+      signedPutUrl(keys.thumbnail_key, DERIVATIVE_CONTENT_TYPE),
+      signedPutUrl(keys.preview_key, DERIVATIVE_CONTENT_TYPE),
       signedPutUrl(keys.original_key, contentType),
     ]);
     return NextResponse.json({ keys, urls: { thumbnail, preview, original } });

@@ -21,9 +21,15 @@ const AMBER = '#D77D20';
 // Where the logo is fetched from. Email clients block SVG widely, so this is
 // the PNG the site already serves. It must be a public absolute URL — an
 // email is read far from this Worker.
+// The lockup — the mark and the wordmark together, as one image. Gmail and
+// Outlook do not render SVG at all, so this is the PNG the site builds from
+// src/generated/logo/lockup.svg (see _Website/scripts/build-icons.mjs).
+// Drawn at 520px for a 260px box so it stays crisp on a 2x screen.
 const LOGO_URL =
   process.env.GALLERY_EMAIL_LOGO_URL ||
-  'https://method26.intellidot.workers.dev/apple-touch-icon.png';
+  'https://method26.intellidot.workers.dev/email-logo.png';
+const LOGO_WIDTH = 260;
+const LOGO_HEIGHT = 50;
 
 const STUDIO = {
   name: 'method26',
@@ -97,11 +103,11 @@ export function baseLayout(
           <!-- Header -->
           <tr>
             <td style="padding:32px 40px 0;text-align:center;border-bottom:1px solid ${STONE};">
-              <img src="${escapeHtml(LOGO_URL)}" alt="${escapeHtml(STUDIO.name)}" width="44" height="44" style="display:block;margin:0 auto;width:44px;height:44px;" />
-              <p style="margin:0;padding:14px 0 4px;font-size:18px;font-weight:700;color:${INK};font-family:Archivo,-apple-system,BlinkMacSystemFont,sans-serif;">
-                ${escapeHtml(STUDIO.name)}
-              </p>
-              <p style="margin:0;padding:0 0 18px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${INK};font-family:'IBM Plex Mono',ui-monospace,monospace;">
+              <!-- The lockup carries the name, so the wordmark is not repeated
+                   as text beneath it. alt does the work when images are
+                   blocked, which is the default in a lot of mail clients. -->
+              <img src="${escapeHtml(LOGO_URL)}" alt="${escapeHtml(STUDIO.name)}" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" style="display:block;margin:0 auto;width:${LOGO_WIDTH}px;height:auto;max-width:70%;" />
+              <p style="margin:0;padding:14px 0 18px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${INK};font-family:'IBM Plex Mono',ui-monospace,monospace;">
                 ${STUDIO.location}
               </p>
             </td>
@@ -174,17 +180,17 @@ export const GALLERY_EMAIL_DEFAULTS: Record<
 > = {
   proofing: {
     label: 'Gallery delivery',
-    subject: 'Your photographs from method26 are ready',
-    heading: 'Your photographs are ready.',
-    body: 'Have a look through and mark the frames you want. We retouch those, and the finished files appear in the same place.',
+    subject: 'Your photos from method26 are ready!',
+    heading: 'Your photos are ready',
+    body: "Hello!\n\nYour photos are now ready! You're invited to view the images from your session — just click the link below to access your private online gallery.\n\nIt was such a pleasure working with you. Thank you for choosing method26!\n\nWarmly,\nmethod26",
     cta: 'View gallery',
   },
   finals: {
     label: 'Retouched downloads',
-    subject: 'Your final photographs from method26 are ready',
-    heading: 'Your final photographs are ready.',
-    body: 'The frames you chose have been retouched. You can download the full-resolution files below.',
-    cta: 'Download photographs',
+    subject: 'Your retouched photos are ready — method26',
+    heading: 'Your retouched photos are ready',
+    body: 'Hi there,\n\nGreat news — your retouched photos are ready for download! Click the button below to access your gallery and save your final images.\n\nWe hope you love them!\n\nBest,\nmethod26',
+    cta: 'Download photos',
   },
 };
 
@@ -246,7 +252,10 @@ export function buildGalleryShareEmailText(input: {
 }): string {
   const variant: GalleryEmailVariant = input.variant ?? 'proofing';
   const defaults = GALLERY_EMAIL_DEFAULTS[variant];
-  const lines = [defaults.heading, input.galleryName, ''];
+  // No heading line: the body copy opens with its own greeting, and repeating
+  // "Your photos are ready" immediately above "Hello!" reads as a machine
+  // talking over itself.
+  const lines = [input.galleryName, ''];
   lines.push(
     input.message?.trim() || defaults.body,
     '',

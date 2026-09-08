@@ -48,7 +48,12 @@ test('C-1: each photo row is saved inside the per-file loop, not batched after i
 
 test('C-1: a failure on one file does not abort the rest of the batch', () => {
   const loop = perFileLoop();
-  const catchKeyword = loop.body.indexOf('catch (error)');
+  // The per-file catch is the one that RECORDS the failure. Locating it by
+  // the first `catch (error)` in the loop broke the moment an inner helper
+  // gained a catch of its own, which says nothing about this property.
+  const recordIndex = loop.body.indexOf('failed.push(');
+  assert.ok(recordIndex !== -1, 'a failed file must be recorded');
+  const catchKeyword = loop.body.lastIndexOf('catch (error)', recordIndex);
   assert.ok(catchKeyword !== -1, 'the per-file work must be wrapped in a try/catch inside the loop');
 
   const catchBlock = balancedBlock(loop.body, loop.body.indexOf('{', catchKeyword));
@@ -65,8 +70,14 @@ test('C-1: a failure on one file does not abort the rest of the batch', () => {
 
 test('C-1: every PUT is retried before a file is treated as failed', () => {
   const loop = perFileLoop();
-  const retryCalls = (loop.body.match(/putWithRetry\(/g) ?? []).length;
-  assert.equal(retryCalls, 3, 'expected the thumbnail, preview and original PUTs to all go through retry');
+  // All three objects go out through one `send` helper, which retries and
+  // then falls back to the proxy — so the property is "three sends, and send
+  // retries", not "three literal putWithRetry calls".
+  const sends = [...loop.body.matchAll(/await send\('(thumbnail|preview|original)'/g)].map((m) => m[1]);
+  assert.deepEqual(sends, ['thumbnail', 'preview', 'original'], 'all three objects must go through send');
+  const sendBody = source.slice(source.indexOf('const send = async ('), source.indexOf('let base = DERIVE'));
+  assert.match(sendBody, /await putWithRetry\(/, 'send must retry before giving up');
+  assert.match(sendBody, /await putViaProxy\(/, 'and then fall back to the same-origin proxy');
 
   // Matched against the whole signature rather than `\([^)]*`, which stops at
   // the first `)` — the callback parameter's own parens used to end the match
