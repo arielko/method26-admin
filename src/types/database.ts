@@ -184,6 +184,47 @@ export type Database = {
           },
         ]
       }
+      gallery_emails: {
+        Row: {
+          error: string | null
+          gallery_id: string
+          id: string
+          provider_id: string | null
+          recipient: string
+          sent_at: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          error?: string | null
+          gallery_id: string
+          id?: string
+          provider_id?: string | null
+          recipient: string
+          sent_at?: string
+          status: string
+          subject: string
+        }
+        Update: {
+          error?: string | null
+          gallery_id?: string
+          id?: string
+          provider_id?: string | null
+          recipient?: string
+          sent_at?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_emails_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "galleries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gallery_favorites: {
         Row: {
           created_at: string

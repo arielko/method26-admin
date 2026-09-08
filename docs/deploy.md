@@ -47,12 +47,19 @@ promise — so committing it plaintext costs nothing.
 ```
 SUPABASE_URL   SUPABASE_ANON_KEY   SUPABASE_SERVICE_ROLE_KEY
 B2_KEY_ID      B2_APP_KEY          B2_BUCKET   B2_REGION
+RESEND_API_KEY GALLERY_EMAIL_FROM
 ```
 
 These are read via `process.env` inside Worker code at request time and must never be committed —
 `SUPABASE_SERVICE_ROLE_KEY` in particular bypasses RLS entirely. `wrangler.jsonc`'s `vars` held
 placeholders here once — `SUPABASE_URL` as `https://your-project.supabase.co` — which deployed
 looking configured and failed at runtime; a missing secret now fails closed instead.
+
+`RESEND_API_KEY` and `GALLERY_EMAIL_FROM` back the Send action on a gallery row
+(src/lib/gallery/mail.ts) — without both set, sending throws naming whichever is missing rather
+than silently no-op'ing. `GALLERY_EMAIL_FROM` isn't secret in the way a key is, but it's set the
+same way so a bad value can't ship from a committed placeholder either — e.g.
+`"method26 Studio <studio@method26.com>"`, a sender on a domain verified in Resend.
 
 **Check `npx wrangler secret list` after setting them.** A malformed invocation can create a
 secret whose *name* is the value; names are not secret, so a key pasted into that field is
