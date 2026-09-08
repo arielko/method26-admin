@@ -9,12 +9,14 @@ import {
   getConsensusRanking,
   listVisitorsWithActivity,
   listDownloadLog,
+  listGalleryEmails,
 } from '@/lib/gallery/queries';
 
 // This is the one route in the admin that hands names and email addresses
-// back to the browser (Favourites, Visitors). middleware.ts exempts /api
-// entirely, so the auth check below is the only thing standing between
-// this data and the public internet — see surface.test.ts.
+// back to the browser (Favourites, Visitors, and now Emails Sent's
+// recipients). middleware.ts exempts /api entirely, so the auth check
+// below is the only thing standing between this data and the public
+// internet — see surface.test.ts.
 //
 // Every tab is pre-aggregated or display-scoped server-side in queries.ts;
 // none of them ship a raw table dump for the client to reduce itself.
@@ -29,7 +31,7 @@ export async function GET(
   const tab = request.nextUrl.searchParams.get('tab');
   if (!isAnalyticsTab(tab)) {
     return NextResponse.json(
-      { error: 'tab must be one of overview, favorites, consensus, visitors, downloads' },
+      { error: 'tab must be one of overview, favorites, consensus, visitors, downloads, emails' },
       { status: 400 }
     );
   }
@@ -69,5 +71,7 @@ export async function GET(
         downloads: await listDownloadLog(id),
         downloadsEnabled: gallery.downloads_enabled,
       });
+    case 'emails':
+      return NextResponse.json({ emails: await listGalleryEmails(id) });
   }
 }

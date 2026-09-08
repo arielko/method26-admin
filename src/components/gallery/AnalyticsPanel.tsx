@@ -10,6 +10,7 @@ import type {
   VisitorWithActivity,
   DownloadLogEntry,
   DayActivity,
+  GalleryEmail,
 } from '@/lib/gallery/queries';
 import { PhotoThumb } from './PhotoThumb';
 
@@ -56,6 +57,7 @@ export function AnalyticsPanel({
   const [consensus, setConsensus] = useState<ConsensusFrame[]>([]);
   const [visitors, setVisitors] = useState<VisitorWithActivity[]>([]);
   const [downloads, setDownloads] = useState<DownloadLogEntry[]>([]);
+  const [emails, setEmails] = useState<GalleryEmail[]>([]);
   const [emailCaptureEnabled, setEmailCaptureEnabled] = useState(true);
   const [downloadsEnabled, setDownloadsEnabled] = useState(false);
 
@@ -72,7 +74,7 @@ export function AnalyticsPanel({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/gallery/galleries/${selectedGalleryId}/analytics?tab=${tab === 'emails' ? 'overview' : tab}`)
+    fetch(`/api/gallery/galleries/${selectedGalleryId}/analytics?tab=${tab}`)
       .then(async (response) => {
         if (!response.ok) throw new Error(`Could not load analytics (${response.status})`);
         return response.json();
@@ -99,7 +101,9 @@ export function AnalyticsPanel({
           setDownloads(body.downloads);
           setDownloadsEnabled(body.downloadsEnabled);
         }
-        // 'emails' has no query of its own — see the tab body below.
+        if (tab === 'emails') {
+          setEmails(body.emails);
+        }
       })
       .catch((caught) => {
         if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
@@ -200,11 +204,10 @@ export function AnalyticsPanel({
                 { label: 'Downloads', value: stats.downloads, icon: Download },
                 { label: 'Favorites', value: stats.favorites, icon: Heart },
                 { label: 'Emails Captured', value: stats.visitors, icon: MailCheck },
-                // No transactional email provider is wired into this app
-                // (no send-email route, no RESEND/SMTP env) — Send opens
-                // the studio's own mail client instead (see PublishPanel),
-                // so a delivery count can't be honestly reported here.
-                { label: 'Emails Sent', value: '—', icon: Mail },
+                // Delivered, not attempted — a failed send doesn't count
+                // here. See the Emails Sent tab for the full log, failures
+                // included.
+                { label: 'Emails Sent', value: stats.emailsSent, icon: Mail },
                 { label: 'Storage', value: formatBytes(storageBytes), icon: HardDrive },
               ] as const
             ).map(({ label, value, icon: Icon }) => (
@@ -419,13 +422,52 @@ export function AnalyticsPanel({
       )}
 
       {!loading && tab === 'emails' && (
-        <div className="border border-stone bg-white px-4 py-6 text-center">
-          <p className="text-[13px] text-ink">No email delivery provider is connected yet.</p>
-          <p className="mx-auto mt-1 max-w-sm text-[12px] text-ink">
-            The Send action on the Galleries tab opens your own mail client with the gallery link
-            filled in — once a transactional provider (Resend, SES…) is wired up, delivered emails
-            will log here.
-          </p>
+        <div>
+          {emails.length === 0 ? (
+            <p className="text-[13px] text-ink">
+              No emails sent on this link yet. Use Send on the Galleries tab to email a client their
+              gallery.
+            </p>
+          ) : (
+            <div className="overflow-x-auto border border-stone bg-white">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-stone text-left text-[11px] uppercase tracking-wide text-ink">
+                    <th className="px-4 py-2 font-medium">Recipient</th>
+                    <th className="px-4 py-2 font-medium">Subject</th>
+                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Sent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emails.map((e) => {
+                    const failed = e.status !== 'sent';
+                    return (
+                      <tr key={e.id} className="border-b border-stone last:border-0">
+                        <td className="px-4 py-2 text-ink">{e.recipient}</td>
+                        <td className="px-4 py-2 text-ink">{e.subject}</td>
+                        <td className="px-4 py-2 text-ink">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide ${
+                              failed ? 'text-red-600' : 'text-ink'
+                            }`}
+                            title={failed && e.error ? e.error : undefined}
+                          >
+                            <span aria-hidden className={`h-1.5 w-1.5 ${failed ? 'bg-red-600' : 'bg-amber'}`} />
+                            {failed ? 'Failed' : 'Sent'}
+                          </span>
+                          {failed && e.error && (
+                            <span className="ml-2 text-[11px] text-ink/60">{e.error}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-ink">{new Date(e.sent_at).toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -2,15 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isAnalyticsTab } from './analytics-tab.ts';
 
-test('accepts exactly the five known analytics tabs', () => {
-  for (const tab of ['overview', 'favorites', 'consensus', 'visitors', 'downloads']) {
+test('accepts exactly the six known analytics tabs', () => {
+  for (const tab of ['overview', 'favorites', 'consensus', 'visitors', 'downloads', 'emails']) {
     assert.equal(isAnalyticsTab(tab), true, `expected "${tab}" to be accepted`);
   }
 });
 
 test('rejects an unknown tab', () => {
-  assert.equal(isAnalyticsTab('emails'), false);
   assert.equal(isAnalyticsTab('activity'), false);
+  assert.equal(isAnalyticsTab('archived'), false);
 });
 
 test('rejects a missing or empty tab', () => {
