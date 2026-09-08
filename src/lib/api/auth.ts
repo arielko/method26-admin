@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 export type SessionRole = "admin" | "social";
 
 export type AuthResult =
-  | { authenticated: true; mode: "session"; userId: string; role: SessionRole }
+  | { authenticated: true; mode: "session"; userId: string; role: SessionRole; email: string | null }
   | { authenticated: true; mode: "api-key"; agent: string }
   | { authenticated: false; error: string };
 
@@ -159,7 +159,11 @@ async function validateSession(opts: AuthOptions = {}): Promise<AuthResult> {
       return { authenticated: false, error: "This account does not have access to this area" };
     }
 
-    return { authenticated: true, mode: "session", userId: user.id, role };
+    // The signed-in address is carried through so "send me a copy" can
+    // address the session's own user. It must come from the verified session,
+    // never from the request body, or the checkbox becomes a way to add an
+    // arbitrary recipient.
+    return { authenticated: true, mode: "session", userId: user.id, role, email: user.email ?? null };
   } catch {
     return { authenticated: false, error: "Session validation failed" };
   }

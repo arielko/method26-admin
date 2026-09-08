@@ -1,4 +1,9 @@
-import { buildGalleryShareEmailHtml, buildGalleryShareEmailText, type GalleryEmailVariant } from './email-templates.ts';
+import {
+  buildGalleryShareEmailHtml,
+  buildGalleryShareEmailText,
+  GALLERY_EMAIL_DEFAULTS,
+  type GalleryEmailVariant,
+} from './email-templates.ts';
 
 // Delivers via Resend's HTTP API rather than its SDK — one POST, no
 // dependency, same approach the public site takes for inquiry mail (see
@@ -25,6 +30,8 @@ export type SendGalleryEmailInput = {
   coverImageUrl?: string | null;
   /** 'finals' changes the heading and the call to action to a download. */
   variant?: GalleryEmailVariant;
+  /** Overrides the variant's default subject when the studio edits it. */
+  subject?: string;
 };
 
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
@@ -54,10 +61,7 @@ export async function sendGalleryEmail(
       body: JSON.stringify({
         from,
         to: [input.to],
-        subject:
-          input.variant === 'finals'
-            ? 'Your final photographs from method26 are ready'
-            : 'Your photos from method26 are ready',
+        subject: input.subject?.trim() || GALLERY_EMAIL_DEFAULTS[input.variant ?? 'proofing'].subject,
         html: buildGalleryShareEmailHtml({
           galleryName: input.galleryName,
           url: input.url,

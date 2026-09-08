@@ -164,6 +164,30 @@ function button(href: string, label: string): string {
 
 export type GalleryEmailVariant = 'proofing' | 'finals';
 
+// The copy each variant sends when the studio doesn't write its own. The
+// share screen prefills its Subject and Message fields from exactly this, so
+// what the preview shows is what the template renders — there is no second,
+// drifting copy of the wording living in the UI.
+export const GALLERY_EMAIL_DEFAULTS: Record<
+  GalleryEmailVariant,
+  { label: string; subject: string; heading: string; body: string; cta: string }
+> = {
+  proofing: {
+    label: 'Gallery delivery',
+    subject: 'Your photographs from method26 are ready',
+    heading: 'Your photographs are ready.',
+    body: 'Have a look through and mark the frames you want. We retouch those, and the finished files appear in the same place.',
+    cta: 'View gallery',
+  },
+  finals: {
+    label: 'Retouched downloads',
+    subject: 'Your final photographs from method26 are ready',
+    heading: 'Your final photographs are ready.',
+    body: 'The frames you chose have been retouched. You can download the full-resolution files below.',
+    cta: 'Download photographs',
+  },
+};
+
 export function buildGalleryShareEmailHtml(input: {
   galleryName: string;
   url: string;
@@ -173,14 +197,16 @@ export function buildGalleryShareEmailHtml(input: {
   variant?: GalleryEmailVariant;
 }): string {
   const variant: GalleryEmailVariant = input.variant ?? 'proofing';
+  const defaults = GALLERY_EMAIL_DEFAULTS[variant];
   const name = escapeHtml(input.galleryName);
 
-  const heading = variant === 'finals' ? 'Your final photographs are ready.' : 'Your photographs are ready.';
-  const lead =
-    variant === 'finals'
-      ? 'The frames you chose have been retouched. You can download the full-resolution files below.'
-      : 'Have a look through and mark the frames you want. We retouch those, and the finished files appear in the same place.';
-  const cta = variant === 'finals' ? 'Download photographs' : 'View gallery';
+  const heading = defaults.heading;
+  // A message the studio typed replaces the default body rather than sitting
+  // above it. Two paragraphs saying the same thing in different words is what
+  // an "optional note" field produces in practice, and the share screen
+  // prefills this box with the default so replacing it is the normal case.
+  const body = input.message?.trim() || defaults.body;
+  const cta = defaults.cta;
 
   const expiresOn = input.expiresAt ? formatExpiryDate(input.expiresAt) : null;
   const expiry = expiresOn
@@ -189,17 +215,10 @@ export function buildGalleryShareEmailHtml(input: {
        </p>`
     : '';
 
-  const personal = input.message?.trim()
-    ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${INK};white-space:pre-line;">${escapeHtml(
-        input.message.trim()
-      )}</p>`
-    : '';
-
   const content = `
     <h1 style="margin:0 0 8px;font-size:26px;line-height:1.2;font-weight:700;color:${INK};font-family:Archivo,-apple-system,BlinkMacSystemFont,sans-serif;">${heading}</h1>
     <p style="margin:0 0 24px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:${INK};font-family:'IBM Plex Mono',ui-monospace,monospace;">${name}</p>
-    ${personal}
-    <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:${INK};">${lead}</p>
+    <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:${INK};white-space:pre-line;">${escapeHtml(body)}</p>
     ${button(input.url, cta)}
     <div style="border-top:2px solid ${AMBER};padding-top:16px;margin-top:8px;">
       <p style="margin:0 0 4px;font-size:13px;line-height:1.6;color:${INK};">
@@ -226,16 +245,11 @@ export function buildGalleryShareEmailText(input: {
   variant?: GalleryEmailVariant;
 }): string {
   const variant: GalleryEmailVariant = input.variant ?? 'proofing';
-  const lines = [
-    variant === 'finals' ? 'Your final photographs are ready.' : 'Your photographs are ready.',
-    input.galleryName,
-    '',
-  ];
-  if (input.message?.trim()) lines.push(input.message.trim(), '');
+  const defaults = GALLERY_EMAIL_DEFAULTS[variant];
+  const lines = [defaults.heading, input.galleryName, ''];
   lines.push(
-    variant === 'finals'
-      ? 'The frames you chose have been retouched. Download the full-resolution files here:'
-      : 'Have a look through and mark the frames you want:',
+    input.message?.trim() || defaults.body,
+    '',
     sanitizeUrl(input.url),
     '',
     'This link is the only credential - anyone who has it can see the work.'

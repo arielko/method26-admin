@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import type { Gallery, Folder, Photo } from '@/lib/gallery/types';
 import { PhotoThumb } from './PhotoThumb';
+import { galleryUrl } from '@/lib/gallery/site-url';
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
 
 type SettingsTab = 'general' | 'cover' | 'downloads' | 'access';
 
@@ -40,7 +40,7 @@ export function GallerySettingsPanel({
   const [copied, setCopied] = useState(false);
   const [customExpiry, setCustomExpiry] = useState('');
 
-  const url = `${SITE}/g/${gallery.token}/`;
+  const url = galleryUrl(gallery.token);
   const nameDirty = name.trim().length > 0 && name.trim() !== gallery.name;
 
   async function saveName(event: React.FormEvent) {

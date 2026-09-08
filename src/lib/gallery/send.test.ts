@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendGalleryLink, isValidRecipient } from './send.ts';
+import {
+  sendGalleryLink,
+  sendGalleryLinks,
+  isValidRecipient,
+  type RecordGalleryEmailRow,
+  type SendGalleryLinkDeps,
+} from './send.ts';
+import { GALLERY_EMAIL_DEFAULTS } from './email-templates.ts';
+import type { MailResult } from './mail.ts';
 import type { Gallery } from './types.ts';
 
 const PUBLISHED: Gallery = {
@@ -133,4 +141,142 @@ test('passes the gallery expiry through to the mail provider', async () => {
   const expiring: Gallery = { ...PUBLISHED, expiration_date: '2026-12-25T00:00:00.000Z' };
   await sendGalleryLink(expiring, 'https://x/g/abc123/', 'client@example.com', undefined, d);
   assert.equal((sent[0] as { expiresAt: string | null }).expiresAt, '2026-12-25T00:00:00.000Z');
+});
+
+// --- sendGalleryLinks (many recipients) ---------------------------------
+
+function galleryFixture(overrides: Partial<Gallery> = {}): Gallery {
+  return { ...PUBLISHED, ...overrides };
+}
+
+function recordingDeps(behaviour: (to: string) => MailResult) {
+  const sends: { to: string; subject?: string; variant?: string; message?: string }[] = [];
+  const rows: RecordGalleryEmailRow[] = [];
+  return {
+    sends,
+    rows,
+    deps: {
+      send: async (input: { to: string; subject?: string; variant?: string; message?: string }) => {
+        sends.push(input);
+        return behaviour(input.to);
+      },
+      record: async (row: RecordGalleryEmailRow) => {
+        rows.push(row);
+      },
+    } as unknown as SendGalleryLinkDeps,
+  };
+}
+
+test('each recipient gets their own message, never a shared To: line', async () => {
+  const { sends, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  const result = await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com', 'b@example.com'] },
+    deps
+  );
+  assert.ok(result.ok);
+  assert.deepEqual(sends.map((s) => s.to), ['a@example.com', 'b@example.com']);
+  for (const send of sends) {
+    assert.ok(!send.to.includes(','), 'one address per send');
+  }
+});
+
+test('one failure does not stop the others, and names the address that failed', async () => {
+  const { deps } = recordingDeps((to) =>
+    to === 'b@example.com' ? { ok: false, error: 'resend-422' } : { ok: true, providerId: 'p' }
+  );
+  const result = await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com', 'b@example.com', 'c@example.com'] },
+    deps
+  );
+  assert.ok(result.ok);
+  assert.deepEqual(
+    result.results.map((r) => [r.email, r.ok]),
+    [['a@example.com', true], ['b@example.com', false], ['c@example.com', true]]
+  );
+  assert.equal(result.results[1].error, 'resend-422');
+});
+
+test('every attempt is logged, successes and failures alike', async () => {
+  const { rows, deps } = recordingDeps((to) =>
+    to === 'b@example.com' ? { ok: false, error: 'resend-500' } : { ok: true, providerId: 'pid' }
+  );
+  await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com', 'b@example.com'] },
+    deps
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].status, 'sent');
+  assert.equal(rows[0].provider_id, 'pid');
+  assert.equal(rows[1].status, 'failed');
+  assert.equal(rows[1].error, 'resend-500');
+});
+
+test('a duplicate address is sent to once', async () => {
+  const { sends, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['A@Example.com', 'a@example.com', ' a@example.com '] },
+    deps
+  );
+  assert.deepEqual(sends.map((s) => s.to), ['a@example.com']);
+});
+
+test('a single bad address refuses the whole send before anything goes out', async () => {
+  const { sends, rows, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  const result = await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com', 'not-an-email'] },
+    deps
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.status, 400);
+    assert.match(result.error, /not-an-email/);
+  }
+  assert.equal(sends.length, 0, 'nothing may be sent');
+  assert.equal(rows.length, 0, 'and nothing logged — there was no attempt');
+});
+
+test('an unpublished gallery is refused before any send', async () => {
+  const { sends, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  const result = await sendGalleryLinks(
+    galleryFixture({ is_published: false }),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com'] },
+    deps
+  );
+  assert.equal(result.ok, false);
+  assert.equal(sends.length, 0);
+});
+
+test('the subject falls back to the variant default and is logged as sent', async () => {
+  const { sends, rows, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com'], variant: 'finals' },
+    deps
+  );
+  assert.equal(sends[0].subject, GALLERY_EMAIL_DEFAULTS.finals.subject);
+  assert.equal(rows[0].subject, GALLERY_EMAIL_DEFAULTS.finals.subject);
+});
+
+test('an edited subject is what sends and what is logged', async () => {
+  const { sends, rows, deps } = recordingDeps(() => ({ ok: true, providerId: 'p' }));
+  await sendGalleryLinks(
+    galleryFixture(),
+    'https://method26.example/g/tok/',
+    { recipients: ['a@example.com'], subject: 'Frames from Tuesday' },
+    deps
+  );
+  assert.equal(sends[0].subject, 'Frames from Tuesday');
+  assert.equal(rows[0].subject, 'Frames from Tuesday');
 });

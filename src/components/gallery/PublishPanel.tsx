@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { Plus, Copy, Check, ExternalLink, Send, Settings, Trash2 } from 'lucide-react';
 import type { Gallery, Folder, Photo } from '@/lib/gallery/types';
 import { GallerySettingsPanel } from './GallerySettingsPanel';
-import { SendGalleryPanel } from './SendGalleryPanel';
-
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://method26.com';
+import { ShareGalleryPanel } from './ShareGalleryPanel';
+import { galleryUrl } from '@/lib/gallery/site-url';
 
 export function PublishPanel({
   collectionId,
@@ -159,7 +158,7 @@ export function PublishPanel({
       ) : (
         <ul className="flex flex-col gap-4">
           {galleries.map((gallery) => {
-            const url = `${SITE}/g/${gallery.token}/`;
+            const url = galleryUrl(gallery.token);
             const expired =
               gallery.expiration_date !== null && new Date(gallery.expiration_date) <= new Date();
             const hiddenHere = hidden[gallery.id] ?? [];
@@ -258,7 +257,7 @@ export function PublishPanel({
                 </div>
 
                 {openSendId === gallery.id && (
-                  <SendGalleryPanel gallery={gallery} onClose={() => setOpenSendId(null)} />
+                  <ShareGalleryPanel gallery={gallery} onClose={() => setOpenSendId(null)} />
                 )}
 
                 {openSettingsId === gallery.id && (
