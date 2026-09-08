@@ -280,3 +280,18 @@ test('a gallery row shows one panel at a time', () => {
   assert.match(openSend, /setOpenSettingsId\(null\)/, 'opening Share must close Settings');
   assert.match(openSettings, /setOpenSendId\(null\)/, 'opening Settings must close Share');
 });
+
+test('dimensions describe the file, not the preview', () => {
+  // These drove CSS aspect-ratio only, so reading them off the preview was
+  // harmless. Then the delivery page started showing them to clients, and a
+  // retouched file was labelled "2048 × 1366" whatever its real size — the
+  // wrong number about the exact file they were about to download.
+  assert.match(derivativesSource, /const \{ width, height \} = await imageDimensions\(file\)/);
+  assert.ok(
+    !/createImageBitmap\(preview\)/.test(derivativesSource),
+    'the preview must not be the source of the recorded dimensions'
+  );
+  // A frame whose header the browser cannot parse still uploads, without
+  // dimensions — the columns are nullable and the page omits the line.
+  assert.match(derivativesSource, /image\.onerror = \(\) => \{\s*resolve\(\{ width: 0, height: 0 \}\)/);
+});

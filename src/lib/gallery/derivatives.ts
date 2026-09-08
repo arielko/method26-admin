@@ -17,6 +17,25 @@ const ORIGINAL_WIDTH = 2560;
 // almost certainly not a photograph for the proofing gallery anyway.
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
+// Resolves to 0x0 rather than rejecting: a frame whose header the browser
+// cannot parse should still upload, just without dimensions. The columns are
+// nullable and the delivery page omits the line when it has nothing to say.
+function imageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      URL.revokeObjectURL(url);
+    };
+    image.onerror = () => {
+      resolve({ width: 0, height: 0 });
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  });
+}
+
 export type Derivatives = {
   thumbnail: Blob;
   preview: Blob;
@@ -74,14 +93,21 @@ export async function deriveImages(
       })
     : null;
 
-  // Dimensions come from the preview (already downsized to at most
-  // PREVIEW_WIDTH on its long edge) rather than a third decode of the
-  // original — imageCompression preserves aspect ratio, so the ratio
-  // recorded here matches the original even though the absolute values are
-  // the preview's.
-  const bitmap = await createImageBitmap(preview);
-  const { width, height } = bitmap;
-  bitmap.close();
+  // The ORIGINAL's dimensions, not the preview's.
+  //
+  // These used to be read off the preview, on the reasoning that
+  // imageCompression preserves aspect ratio so the ratio would be right even
+  // though the absolute values were the preview's. That was fine while the
+  // numbers only drove CSS aspect-ratio. It stopped being fine when the
+  // delivery page began showing them to clients: a retouched file was
+  // labelled "2048 × 1366" whatever its real size, so a client checking
+  // whether a photograph is big enough to print was told the wrong number
+  // about the exact file they were about to download.
+  //
+  // An <img> rather than createImageBitmap: it reports naturalWidth without
+  // handing us a full decoded bitmap to hold and close, which is what the
+  // memory note above was guarding against on 45MP frames.
+  const { width, height } = await imageDimensions(file);
 
   return { thumbnail, preview, original, width, height };
 }
