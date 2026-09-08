@@ -6,6 +6,13 @@
   // here.
   "main": "worker.ts",
   "name": "method26-admin",
+
+  // A custom domain, not a route: studio.method26.com has no DNS record, and
+  // a custom domain creates and manages one. (The public site uses routes
+  // instead, because its records already exist and point at WordPress.)
+  "routes": [
+    { "pattern": "studio.method26.com", "custom_domain": true }
+  ],
   // This worker used to also run a `*/5 * * * *` cron (see worker.ts's old
   // `scheduled` handler) that POSTed to /api/crm/tick and /api/social/tick.
   // Both routes were deleted along with the CRM and social modules on this
@@ -81,6 +88,6 @@
     // The public gallery site has no custom domain yet — method26.com still
     // serves the old WordPress site, so every share link built from that
     // value 404'd. It actually lives at its own workers.dev URL.
-    "NEXT_PUBLIC_SITE_URL": "https://method26.intellidot.workers.dev"
+    "NEXT_PUBLIC_SITE_URL": "https://method26.com"
   }
 }

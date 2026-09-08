@@ -27,7 +27,7 @@ const AMBER = '#D77D20';
 // Drawn at 520px for a 260px box so it stays crisp on a 2x screen.
 const LOGO_URL =
   process.env.GALLERY_EMAIL_LOGO_URL ||
-  'https://method26.intellidot.workers.dev/email-logo.png';
+  'https://method26.com/email-logo.png';
 const LOGO_WIDTH = 260;
 const LOGO_HEIGHT = 50;
 
