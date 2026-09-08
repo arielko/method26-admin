@@ -270,3 +270,13 @@ test('deleting a shoot says what it destroys before it does it', () => {
   const queries = stripComments(readFileSync('src/lib/gallery/queries.ts', 'utf8'));
   assert.match(queries, /export async function deleteCollection/);
 });
+
+test('a gallery row shows one panel at a time', () => {
+  // Share and Settings were independent state, so opening one while the other
+  // was open rendered both stacked under the same row.
+  const panel = stripComments(readFileSync('src/components/gallery/PublishPanel.tsx', 'utf8'));
+  const openSend = panel.slice(panel.indexOf('setOpenSendId((cur)'), panel.indexOf('aria-expanded={openSendId'));
+  const openSettings = panel.slice(panel.indexOf('setOpenSettingsId((cur)'), panel.indexOf('aria-expanded={openSettingsId'));
+  assert.match(openSend, /setOpenSettingsId\(null\)/, 'opening Share must close Settings');
+  assert.match(openSettings, /setOpenSendId\(null\)/, 'opening Settings must close Share');
+});

@@ -211,7 +211,14 @@ export function PublishPanel({
                     </a>
                     <button
                       type="button"
-                      onClick={() => setOpenSendId((cur) => (cur === gallery.id ? null : gallery.id))}
+                      onClick={() => {
+                        setOpenSendId((cur) => (cur === gallery.id ? null : gallery.id));
+                        // Mutually exclusive: these two are separate pieces of
+                        // state, so opening one while the other was open used
+                        // to render both stacked under the same row, with the
+                        // second appearing to swallow the first.
+                        setOpenSettingsId(null);
+                      }}
                       aria-expanded={openSendId === gallery.id}
                       title="Send via email"
                       className={`p-2 transition-colors ${openSendId === gallery.id ? 'bg-ink text-paper' : 'text-ink hover:bg-paper'}`}
@@ -220,7 +227,10 @@ export function PublishPanel({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setOpenSettingsId((cur) => (cur === gallery.id ? null : gallery.id))}
+                      onClick={() => {
+                        setOpenSettingsId((cur) => (cur === gallery.id ? null : gallery.id));
+                        setOpenSendId(null);
+                      }}
                       aria-expanded={openSettingsId === gallery.id}
                       title="Settings"
                       className={`p-2 transition-colors ${openSettingsId === gallery.id ? 'bg-ink text-paper' : 'text-ink hover:bg-paper'}`}
