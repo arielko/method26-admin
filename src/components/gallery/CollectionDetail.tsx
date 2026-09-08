@@ -24,6 +24,14 @@ import { AnalyticsPanel } from './AnalyticsPanel';
 type View = 'photos' | 'galleries' | 'analytics';
 type SortOption = 'filename-asc' | 'filename-desc' | 'date-asc' | 'date-desc';
 
+// The folder nav's built-in, always-present entry — not a real folder row,
+// so it needs a value activeFolderId can hold that no actual folder.id will
+// ever collide with. Selecting it filters to every photo whose folder has
+// is_retouched: true, across all folders at once — the same split that
+// decides whether a client sees a frame on their proofing page or their
+// delivery page (see folder.is_retouched in queries.ts).
+const RETOUCHED_FILTER = '__retouched__';
+
 const SORT_LABELS: Record<SortOption, string> = {
   'filename-asc': 'Filename A → Z',
   'filename-desc': 'Filename Z → A',
@@ -73,10 +81,21 @@ export function CollectionDetail({
 
   const activeFolder = useMemo(() => folders.find((f) => f.id === activeFolderId), [folders, activeFolderId]);
 
-  const visiblePhotos = useMemo(
-    () => (activeFolderId ? photos.filter((p) => p.folder_id === activeFolderId) : photos),
-    [photos, activeFolderId]
+  const retouchedFolderIds = useMemo(
+    () => new Set(folders.filter((f) => f.is_retouched).map((f) => f.id)),
+    [folders]
   );
+  const retouchedCount = useMemo(
+    () => photos.filter((p) => p.folder_id !== null && retouchedFolderIds.has(p.folder_id)).length,
+    [photos, retouchedFolderIds]
+  );
+
+  const visiblePhotos = useMemo(() => {
+    if (activeFolderId === RETOUCHED_FILTER) {
+      return photos.filter((p) => p.folder_id !== null && retouchedFolderIds.has(p.folder_id));
+    }
+    return activeFolderId ? photos.filter((p) => p.folder_id === activeFolderId) : photos;
+  }, [photos, activeFolderId, retouchedFolderIds]);
 
   const sortedPhotos = useMemo(() => {
     const sorted = [...visiblePhotos];
@@ -97,12 +116,14 @@ export function CollectionDetail({
     return sorted;
   }, [visiblePhotos, sortBy]);
 
-  // Every photo needs a folder_id at creation (see the photos POST route),
-  // so the toolbar's Upload button needs an unambiguous target: the active
-  // folder if one is selected, or the collection's only folder if it has
-  // exactly one. Anything more ambiguous disables the button rather than
-  // guessing.
-  const uploadFolderId = activeFolderId ?? (folders.length === 1 ? folders[0].id : undefined);
+  // Every photo needs a folder_id at creation (see the photos POST route).
+  // The toolbar's Upload button targets the active real folder if one is
+  // selected, or the collection's default (first) folder otherwise — never
+  // the virtual Retouched entry, which isn't a folder photos can land in.
+  // If the collection has no folder at all yet, PhotoUploader itself
+  // creates one on demand rather than the control disabling itself.
+  const uploadFolderId =
+    activeFolderId && activeFolderId !== RETOUCHED_FILTER ? activeFolderId : folders[0]?.id;
 
   async function setCoverFromDrop(photoId: string) {
     setError(null);
@@ -155,6 +176,25 @@ export function CollectionDetail({
       });
       if (!response.ok) throw new Error(`Could not rename the folder (${response.status})`);
       setEditingFolderId(null);
+      onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
+  // Reachable from the folder navigation's own "…" menu — the only other
+  // place is the Add Folder form's checkbox, which only ever sets the flag
+  // at creation and can't change it on a folder that already exists.
+  async function toggleRetouched(folderId: string, current: boolean) {
+    setError(null);
+    try {
+      const response = await fetch('/api/gallery/folders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folderId, isRetouched: !current }),
+      });
+      if (!response.ok) throw new Error(`Could not update the folder (${response.status})`);
+      setFolderMenuId(null);
       onChanged();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -326,6 +366,27 @@ export function CollectionDetail({
                 </span>
               </button>
 
+              {/* Built-in, always present — not one of the photographer's
+                  own folders, so it survives even when the collection has
+                  no is_retouched folder yet. Aggregates every photograph in
+                  every folder marked retouched, the split that decides
+                  whether a client sees a frame on their proofing page or
+                  their delivery page. */}
+              <button
+                type="button"
+                onClick={() => setActiveFolderId(RETOUCHED_FILTER)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors ${
+                  activeFolderId === RETOUCHED_FILTER ? 'bg-ink text-paper' : 'text-ink hover:bg-stone'
+                }`}
+              >
+                {/* Mark, not text — see the fill-amber note below. */}
+                <Sparkle aria-hidden className="h-3.5 w-3.5 shrink-0 fill-amber text-amber" />
+                <span className="flex-1 truncate">Retouched</span>
+                <span className={`font-mono text-[10px] ${activeFolderId === RETOUCHED_FILTER ? 'text-paper' : 'text-ink'}`}>
+                  {retouchedCount}
+                </span>
+              </button>
+
               {folders.map((folder) => {
                 const isActive = activeFolderId === folder.id;
                 const count = photos.filter((p) => p.folder_id === folder.id).length;
@@ -411,6 +472,14 @@ export function CollectionDetail({
                         </button>
                         <button
                           type="button"
+                          onClick={() => toggleRetouched(folder.id, folder.is_retouched)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-ink hover:bg-paper"
+                        >
+                          <Sparkle className="h-3 w-3" aria-hidden />
+                          {folder.is_retouched ? 'Unmark Retouched' : 'Mark Retouched'}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => deleteFolder(folder.id)}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-red-600 hover:bg-paper"
                         >
@@ -481,9 +550,9 @@ export function CollectionDetail({
         <div className="min-w-0 flex-1">
           {view === 'photos' && (
             <>
-              {activeFolder && (
+              {(activeFolder || activeFolderId === RETOUCHED_FILTER) && (
                 <p className="mb-3 text-[12px] text-ink">
-                  {activeFolder.is_retouched
+                  {activeFolderId === RETOUCHED_FILTER || activeFolder?.is_retouched
                     ? 'Retouched — delivered on the client’s downloadable delivery page.'
                     : 'Proofing — the client picks favourites here; nothing downloads from this folder.'}
                 </p>

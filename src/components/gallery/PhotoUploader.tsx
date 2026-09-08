@@ -15,9 +15,11 @@ export function PhotoUploader({
   onDone,
 }: {
   collectionId: string;
-  // Undefined when the toolbar has nothing unambiguous to upload into yet
-  // (no folders, or more than one and none selected) — the button disables
-  // itself rather than guessing which folder a photo should land in.
+  // Undefined when the toolbar has no folder actively selected (the "All
+  // Photos" view, or a brand-new collection with none yet). Upload is never
+  // disabled for this — see handleFiles, which creates the collection's
+  // default folder on demand rather than blocking the control on a choice
+  // the photographer hasn't made yet.
   folderId: string | undefined;
   onDone: () => void;
 }) {
@@ -39,11 +41,27 @@ export function PhotoUploader({
   }, [progress]);
 
   async function handleFiles(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0 || !folderId) return;
+    if (!fileList || fileList.length === 0) return;
     setError(null);
     setFailures([]);
     try {
-      const result = await uploadPhotos(collectionId, folderId, Array.from(fileList), setProgress);
+      // A photograph has to land in some folder, but the toolbar's own
+      // "All Photos" view (or a brand-new collection) has none selected —
+      // rather than disabling Upload until the photographer picks one, fall
+      // back to the collection's default folder, creating it if the
+      // collection doesn't have one yet.
+      let targetFolderId = folderId;
+      if (!targetFolderId) {
+        const response = await fetch('/api/gallery/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collectionId, name: 'Photos', isRetouched: false }),
+        });
+        if (!response.ok) throw new Error(`Could not create a default folder (${response.status})`);
+        const { folder } = (await response.json()) as { folder: { id: string } };
+        targetFolderId = folder.id;
+      }
+      const result = await uploadPhotos(collectionId, targetFolderId, Array.from(fileList), setProgress);
       setFailures(result.failed);
       if (result.succeeded.length > 0) onDone();
     } catch (caught) {
@@ -60,14 +78,8 @@ export function PhotoUploader({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={!folderId || progress !== null}
-        title={
-          !folderId
-            ? 'Select (or add) a folder to upload into'
-            : progress !== null
-              ? 'Uploading…'
-              : undefined
-        }
+        disabled={progress !== null}
+        title={progress !== null ? 'Uploading…' : undefined}
         className="flex items-center gap-1.5 border border-stone px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-ink hover:border-ink transition-colors disabled:opacity-40 disabled:hover:border-stone"
       >
         <Upload className="h-3.5 w-3.5" aria-hidden />
@@ -78,7 +90,7 @@ export function PhotoUploader({
         type="file"
         multiple
         accept="image/*"
-        disabled={!folderId || progress !== null}
+        disabled={progress !== null}
         onChange={(event) => {
           handleFiles(event.target.files);
           event.target.value = '';
