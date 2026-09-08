@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 delete process.env.RESEND_API_KEY;
 delete process.env.GALLERY_EMAIL_FROM;
 
-const { sendGalleryEmail } = await import('./mail.ts');
+const { sendGalleryEmail, redactEmails } = await import('./mail.ts');
 
 const INPUT = { to: 'client@example.com', galleryName: 'Whitfield Family', url: 'https://method26.example/g/abc123/' };
 
@@ -169,4 +169,40 @@ test('returns a failure result when the network call itself throws', async () =>
 
   delete process.env.RESEND_API_KEY;
   delete process.env.GALLERY_EMAIL_FROM;
+});
+
+test('a provider error says what went wrong, without leaking an address', async () => {
+  // `resend-422` alone was undiagnosable: a malformed From address, an
+  // unverified domain and a bad payload all looked identical, and a real
+  // failed send could not be acted on.
+  process.env.RESEND_API_KEY = 'k';
+  process.env.GALLERY_EMAIL_FROM = 'method26 <studio@method26.com>';
+  const result = await sendGalleryEmail(
+    { to: 'client@example.com', galleryName: 'G', url: 'https://method26.example/g/t/' },
+    (async () =>
+      new Response(
+        JSON.stringify({
+          statusCode: 422,
+          name: 'validation_error',
+          message: 'Invalid `from` field. The email address client@example.com is not valid.',
+        }),
+        { status: 422 }
+      )) as unknown as typeof fetch
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /^resend-422 /, 'the status is still there');
+    assert.match(result.error, /validation_error/, 'and the provider name');
+    assert.match(result.error, /Invalid `from` field/, 'and the message that identifies the fault');
+    assert.ok(!result.error.includes('client@example.com'), 'but never an address');
+    assert.match(result.error, /<email>/, 'which is redacted, not dropped');
+  }
+});
+
+test('redaction is broad enough for text written by somebody else', () => {
+  // Over-redaction is the deliberate direction: the trailing sentence period
+  // is swallowed with the address, which costs a little clarity and never
+  // costs a leaked address.
+  assert.equal(redactEmails('to a@b.co and <c@d.io>, plus e@f.dev.'), 'to <email> and <<email>>, plus <email>');
+  assert.equal(redactEmails('nothing here'), 'nothing here');
 });

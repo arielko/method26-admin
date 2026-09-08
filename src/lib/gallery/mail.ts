@@ -34,6 +34,13 @@ export type SendGalleryEmailInput = {
   subject?: string;
 };
 
+// Anything shaped like an address becomes <email>. Deliberately broad: this
+// runs over text from a third party, and over-redacting costs a little
+// clarity while under-redacting writes a client's address into a log.
+export function redactEmails(text: string): string {
+  return text.replace(/[^\s<>"']+@[^\s<>"']+\.[^\s<>"',;)]+/g, '<email>');
+}
+
 export type MailResult = { ok: true; providerId: string } | { ok: false; error: string };
 
 export async function sendGalleryEmail(
@@ -81,10 +88,24 @@ export async function sendGalleryEmail(
     });
 
     if (!res.ok) {
-      // The status code, not the response body — Resend's error text can
-      // echo the request back, and the recipient address must never
-      // travel any further than the caller who already typed it.
-      return { ok: false, error: `resend-${res.status}` };
+      // The status alone was undiagnosable. A real send failed with
+      // `resend-422` and there was no way to tell a malformed From address
+      // from an unverified domain from a bad payload — the studio could only
+      // guess, and so could I.
+      //
+      // Resend's message is what says which. It is included, with every email
+      // address stripped out first: the error text echoes the request back,
+      // and a recipient's address must not travel any further than the person
+      // who typed it. The studio's own From address goes the same way — it is
+      // named by GALLERY_EMAIL_FROM, so the operator can already read it.
+      const detail = await res
+        .json()
+        .then((body: { name?: string; message?: string }) =>
+          [body.name, body.message].filter(Boolean).join(': ')
+        )
+        .catch(() => '');
+      const safe = redactEmails(detail).slice(0, 300);
+      return { ok: false, error: safe ? `resend-${res.status} ${safe}` : `resend-${res.status}` };
     }
 
     const data = (await res.json().catch(() => ({}))) as { id?: string };
