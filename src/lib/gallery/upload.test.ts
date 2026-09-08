@@ -295,3 +295,21 @@ test('dimensions describe the file, not the preview', () => {
   // dimensions — the columns are nullable and the page omits the line.
   assert.match(derivativesSource, /image\.onerror = \(\) => \{\s*resolve\(\{ width: 0, height: 0 \}\)/);
 });
+
+test('a new shoot has both stages from the start', () => {
+  // They existed only on demand: Photos appeared with the first upload, and
+  // Retouched only if somebody happened to upload while the Retouched view
+  // was open. A photographer looking at a new shoot saw no sign the second
+  // stage existed.
+  const queries = stripComments(readFileSync('src/lib/gallery/queries.ts', 'utf8'));
+  const body = queries.slice(
+    queries.indexOf('export async function createCollection'),
+    queries.indexOf('export async function getCollection')
+  );
+  assert.match(body, /createFolder\(collection\.id, 'Photos', false\)/);
+  assert.match(body, /createFolder\(collection\.id, 'Retouched', true\)/);
+  // And a folder that cannot be pre-made must not cost the photographer the
+  // shoot they just named.
+  assert.match(body, /catch \(error\) \{[\s\S]*console\.error/);
+  assert.match(body, /return collection;/);
+});

@@ -24,7 +24,27 @@ export async function createCollection(name: string): Promise<Collection> {
   const { data, error } = await createAdminClient()
     .from('collections').insert({ name }).select('id,name,created_at').single();
   if (error) throw new Error(`createCollection: ${error.message}`);
-  return data as Collection;
+  const collection = data as Collection;
+
+  // Every shoot gets both folders up front, because every shoot has both
+  // stages: frames the client picks from, and the retouched files they
+  // receive. They existed only on demand before — Photos appeared with the
+  // first upload and Retouched only if somebody happened to upload while the
+  // Retouched view was open — so a photographer looking at a new shoot saw no
+  // sign that the second stage existed at all.
+  //
+  // Not fatal if it fails: the collection is already created, and
+  // findOrCreateDefaultFolder still makes whichever folder is missing at
+  // upload time. A folder that could not be pre-made must not cost the
+  // photographer the shoot they just named.
+  try {
+    await createFolder(collection.id, 'Photos', false);
+    await createFolder(collection.id, 'Retouched', true);
+  } catch (error) {
+    console.error('createCollection: default folders not created', error);
+  }
+
+  return collection;
 }
 
 // Used by the collection detail page to render a name/header without
