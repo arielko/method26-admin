@@ -244,8 +244,12 @@ export function CollectionDetail({
     }
   }
 
+  // Full width, not max-w-6xl. This view is a wall of photographs, and a
+  // 1152px cap was throwing away a third of a normal screen — six columns
+  // inside it made every frame about half the size of the reference's, on the
+  // same monitor.
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-[1800px]">
       <div className="border-b border-stone pb-4">
         <Link href="/gallery" className="text-[12px] uppercase tracking-wide text-ink">
           ← Galleries

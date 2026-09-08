@@ -33,14 +33,17 @@ const panel = readAnalyticsSource('src/components/gallery/AnalyticsPanel.tsx', '
   .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
   .replace(/\/\/.*$/gm, '');
 
-test('the overview no longer reports views', () => {
+test('the overview is stat tiles, with no activity chart', () => {
   // Views are still recorded; they are not shown. A page-view count answers
-  // nothing the studio acts on, and it dominated the 30-day chart's scale so
-  // downloads — the number that does — rounded to nothing beside it.
+  // nothing the studio acts on. The 30-day chart went with it — with views
+  // removed it was a single series of mostly-zero bars.
   assert.ok(!/label: 'Views'/.test(panel), 'no Views stat tile');
   assert.ok(!/<Eye\b/.test(panel), 'and no eye icon left behind');
-  assert.match(panel, /const maxDownloads = Math\.max\(1, \.\.\.activity30d\.map\(\(d\) => d\.downloads\)\)/);
-  assert.ok(!/maxActivity/.test(panel), 'the old combined scale is gone');
+  assert.ok(!/Last 30 Days/.test(panel), 'no activity chart');
+  // Its state and its type import go too — a chart nobody renders that still
+  // fetches its data is the kind of thing that survives for years.
+  assert.ok(!/activity30d/.test(panel), 'and none of the state behind it');
+  assert.ok(!/maxActivity|maxDownloads/.test(panel), 'nor the scale it needed');
 });
 
 test('favorites are grouped per person, with their count and the filenames', () => {
@@ -59,5 +62,30 @@ test('consensus shows the vote count on the frame itself', () => {
   assert.match(panel, /bg-amber px-1\.5 py-0\.5 font-mono text-\[11px\] text-ink/);
   // JSX interpolation is `{...}`, not `${...}` — this is markup, not a
   // template literal.
-  assert.match(panel, /photo\{consensus\.length === 1 \? '' : 's'\} liked by 2\+/);
+  // Counts what is on screen, not what was fetched — with a filter applied
+  // the header must agree with the grid under it.
+  assert.match(panel, /photo\{visibleConsensus\.length === 1 \? '' : 's'\} liked by 2\+/);
+});
+
+test('consensus can be searched by filename or frame number', () => {
+  // Frame numbers live in the filename — "1005", "DSC4746" — so one
+  // case-insensitive substring filter over it is what "find frame 1005"
+  // actually needs.
+  assert.match(panel, /const \[consensusQuery, setConsensusQuery\] = useState\(''\)/);
+  assert.match(panel, /frame\.filename\.toLowerCase\(\)\.includes\(q\)/);
+  assert.match(panel, /placeholder="Search by filename or number…"/);
+  // The grid renders the filtered set, not the full one.
+  assert.match(panel, /\{visibleConsensus\.map\(\(frame\) =>/);
+  // And says so when a search matches nothing, rather than showing an empty
+  // grid that reads as "no consensus yet".
+  assert.match(panel, /Nothing matches/);
+});
+
+test('photograph grids are sized by tile, not by column count', () => {
+  // Six fixed columns inside a 1152px cap made every frame about half the
+  // size of the reference's on the same monitor. A minimum tile width holds
+  // the frame size steady and lets the column count follow the window.
+  const grids = panel.match(/grid-template-columns:repeat\(auto-fill,minmax\(220px,1fr\)\)/g) ?? [];
+  assert.equal(grids.length, 2, 'favorites and consensus both');
+  assert.ok(!/lg:grid-cols-6/.test(panel), 'no fixed six-column grids left');
 });

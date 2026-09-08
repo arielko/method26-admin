@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Heart, MailCheck, Mail, HardDrive, FileDown, Users } from 'lucide-react';
+import { Download, Heart, MailCheck, Mail, HardDrive, FileDown, Users, Search } from 'lucide-react';
 import type { Photo, Gallery } from '@/lib/gallery/types';
 import type {
   GalleryOverviewStats,
@@ -9,7 +9,6 @@ import type {
   ConsensusFrame,
   VisitorWithActivity,
   DownloadLogEntry,
-  DayActivity,
   GalleryEmail,
 } from '@/lib/gallery/queries';
 import { PhotoThumb } from './PhotoThumb';
@@ -48,11 +47,14 @@ export function AnalyticsPanel({
 }) {
   const [selectedGalleryId, setSelectedGalleryId] = useState<string | null>(galleries[0]?.id ?? null);
   const [tab, setTab] = useState<AnalyticsTab>('overview');
+  // Frame numbers live in the filename — "1005", "DSC4746" — so one text
+  // filter over it is what "find frame 1005" actually needs. Substring, not
+  // prefix: the studio and the client both say the number, not the whole name.
+  const [consensusQuery, setConsensusQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [stats, setStats] = useState<GalleryOverviewStats | null>(null);
-  const [activity30d, setActivity30d] = useState<DayActivity[]>([]);
   const [favoriteGroups, setFavoriteGroups] = useState<FavoriteGroup[]>([]);
   const [consensus, setConsensus] = useState<ConsensusFrame[]>([]);
   const [visitors, setVisitors] = useState<VisitorWithActivity[]>([]);
@@ -60,6 +62,14 @@ export function AnalyticsPanel({
   const [emails, setEmails] = useState<GalleryEmail[]>([]);
   const [emailCaptureEnabled, setEmailCaptureEnabled] = useState(true);
   const [downloadsEnabled, setDownloadsEnabled] = useState(false);
+
+  // Case-insensitive substring over the filename: typing 1005 finds
+  // Danielle1005.jpg without the studio having to remember the prefix.
+  const visibleConsensus = useMemo(() => {
+    const q = consensusQuery.trim().toLowerCase();
+    if (q.length === 0) return consensus;
+    return consensus.filter((frame) => frame.filename.toLowerCase().includes(q));
+  }, [consensus, consensusQuery]);
 
   const storageBytes = useMemo(
     () => photos.reduce((sum, p) => sum + (p.file_size_bytes ?? 0), 0),
@@ -83,7 +93,6 @@ export function AnalyticsPanel({
         if (cancelled) return;
         if (tab === 'overview') {
           setStats(body.stats);
-          setActivity30d(body.activity30d ?? []);
         }
         if (tab === 'favorites') {
           setFavoriteGroups(body.groups);
@@ -150,8 +159,6 @@ export function AnalyticsPanel({
   }
 
   // Scaled to downloads alone. While views were in this max, a single view
-  // spike set the scale and every download bar rounded to nothing.
-  const maxDownloads = Math.max(1, ...activity30d.map((d) => d.downloads));
 
   return (
     <div className="flex flex-col gap-6">
@@ -198,8 +205,7 @@ export function AnalyticsPanel({
       {loading && <p className="text-[13px] text-ink">Loading…</p>}
 
       {!loading && tab === 'overview' && stats && (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {(
               [
                 // Views are still recorded (gallery_views), just not shown:
@@ -224,42 +230,6 @@ export function AnalyticsPanel({
                 <p className="mt-1 text-[28px] font-semibold text-ink">{value}</p>
               </div>
             ))}
-          </div>
-
-          <div className="border border-stone bg-white p-4">
-            <p className="mb-3 text-[11px] uppercase tracking-wide text-ink">Last 30 Days</p>
-            {activity30d.length === 0 ? (
-              <p className="text-[13px] text-ink">No activity yet.</p>
-            ) : (
-              <>
-                {/* Downloads only. Scaled to the busiest download day rather
-                    than to all activity — with views in the series one view
-                    spike set the scale and every download bar rounded to
-                    nothing. */}
-                <div className="flex h-20 items-end gap-[2px]">
-                  {activity30d.map((day) => (
-                    <div
-                      key={day.date}
-                      className="flex h-full flex-1 items-end"
-                      title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString()}: ${day.downloads} download${day.downloads === 1 ? '' : 's'}`}
-                    >
-                      <div
-                        className="w-full bg-ink"
-                        style={{
-                          height: day.downloads > 0 ? `${Math.max((day.downloads / maxDownloads) * 100, 6)}%` : '0%',
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 text-[11px] text-ink">
-                    <span aria-hidden className="h-2 w-2 bg-ink" /> Downloads
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       )}
 
@@ -292,7 +262,7 @@ export function AnalyticsPanel({
                     {group.photos.length} favorite{group.photos.length === 1 ? '' : 's'}
                   </p>
                 </div>
-                <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                <ul className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
                   {group.photos.map((photo) => (
                     <li key={photo.id} className="border border-stone">
                       {/* 4:3, not square: these are headshots, and a square
@@ -326,18 +296,36 @@ export function AnalyticsPanel({
               cannot be computed until visitors are known.
             </p>
           )}
+          {consensus.length > 0 && (
+            <label className="flex items-center gap-2 border border-stone bg-white px-3 py-2">
+              <Search className="h-3.5 w-3.5 shrink-0 text-ink/60" aria-hidden />
+              <span className="sr-only">Search by filename or frame number</span>
+              <input
+                type="search"
+                value={consensusQuery}
+                onChange={(e) => setConsensusQuery(e.target.value)}
+                placeholder="Search by filename or number…"
+                className="w-full border-0 bg-transparent p-0 text-[13px] text-ink outline-none"
+              />
+            </label>
+          )}
+
           {consensus.length === 0 ? (
             <p className="text-[13px] text-ink">No frames with more than one identified favorite yet.</p>
+          ) : visibleConsensus.length === 0 ? (
+            <p className="text-[13px] text-ink">
+              Nothing matches “{consensusQuery}”.
+            </p>
           ) : (
             <>
               <div className="flex flex-wrap items-baseline gap-2">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-ink">Overlaps</p>
                 <span className="bg-amber/15 px-2 py-0.5 font-mono text-[11px] text-ink">
-                  {consensus.length} photo{consensus.length === 1 ? '' : 's'} liked by 2+
+                  {visibleConsensus.length} photo{visibleConsensus.length === 1 ? '' : 's'} liked by 2+
                 </span>
               </div>
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                {consensus.map((frame) => (
+              <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+                {visibleConsensus.map((frame) => (
                   <li key={frame.photoId} className="relative border border-amber bg-white">
                     <div className="aspect-[4/3] overflow-hidden border-b border-stone">
                       <PhotoThumb photoId={frame.photoId} alt={frame.filename} className="h-full w-full object-cover" />
