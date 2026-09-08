@@ -171,7 +171,7 @@ export function PublishPanel({
                     <span
                       aria-hidden
                       title={live ? 'Live' : 'Draft'}
-                      className={`h-2 w-2 shrink-0 ${live ? 'bg-amber' : 'bg-stone'}`}
+                      className={`h-2 w-2 shrink-0 ${live ? 'bg-live' : 'bg-stone'}`}
                     />
                     <div className="min-w-0">
                       <h3 className="text-[14px] font-semibold text-ink">{gallery.name}</h3>
@@ -183,9 +183,14 @@ export function PublishPanel({
                     <button
                       type="button"
                       onClick={() => patch(gallery.id, { isPublished: !gallery.is_published })}
-                      className="px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide text-ink hover:bg-paper transition-colors"
+                      className={`px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide transition-colors hover:bg-paper ${
+                        live ? 'text-live' : 'text-ink'
+                      }`}
                       title={gallery.is_published ? 'Unpublish' : 'Publish'}
                     >
+                      {/* The word does the work; the colour only confirms it.
+                          A reader who cannot separate the green from the ink
+                          still reads LIVE or DRAFT. */}
                       {gallery.is_published ? 'Live' : 'Draft'}
                     </button>
                     <button
