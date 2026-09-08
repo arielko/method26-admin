@@ -241,3 +241,32 @@ test('a repeated upload cannot leave a trail of empty folders', () => {
     'it must look for an existing folder of the right kind before creating one'
   );
 });
+
+test('a shoot card offers Share and Delete without nesting buttons', () => {
+  const view = stripComments(readFileSync('src/components/gallery/CollectionsView.tsx', 'utf8'));
+  // A <button> cannot legally contain another button, and nesting them would
+  // make every Delete click also open the shoot. The actions are siblings of
+  // the card button, positioned over it.
+  assert.match(view, /<li key=\{collection\.id\} className="group relative">/);
+  assert.match(view, /className="absolute bottom-4 right-4/);
+  assert.match(view, /group-hover:opacity-100 group-focus-within:opacity-100/,
+    'hover-only would put both actions out of reach of anyone tabbing through');
+  assert.match(view, /<Share2 className="h-4 w-4" aria-hidden \/>/);
+  assert.match(view, /<Trash2 className="h-4 w-4" aria-hidden \/>/);
+  // Icon-only controls still need names.
+  assert.match(view, /aria-label=\{`Share \$\{collection\.name\}`\}/);
+  assert.match(view, /aria-label=\{`Delete \$\{collection\.name\}`\}/);
+});
+
+test('deleting a shoot says what it destroys before it does it', () => {
+  const view = stripComments(readFileSync('src/components/gallery/CollectionsView.tsx', 'utf8'));
+  assert.match(view, /if \(!confirm\(warning\)\) return;/, 'never delete without confirmation');
+  // Folders, photographs and gallery links all cascade — including links
+  // already sitting in a client's inbox.
+  assert.match(view, /photograph\$\{count === 1 \? '' : 's'\}/);
+  assert.match(view, /already sent to clients/);
+  assert.match(view, /cannot be undone/);
+
+  const queries = stripComments(readFileSync('src/lib/gallery/queries.ts', 'utf8'));
+  assert.match(queries, /export async function deleteCollection/);
+});

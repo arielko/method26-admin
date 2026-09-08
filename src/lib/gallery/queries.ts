@@ -234,6 +234,22 @@ export async function deleteFolder(id: string): Promise<void> {
   if (error) throw new Error(`deleteFolder: ${error.message}`);
 }
 
+/**
+ * Deletes a shoot and everything under it. Folders, photographs and gallery
+ * links all cascade (see 0001_gallery_schema.sql), so this one row takes the
+ * whole collection with it, including every share link already sent out.
+ *
+ * The B2 objects behind those photographs are left in place — this app holds
+ * only signed PUT/GET for the bucket, no delete credential (see b2.ts), and
+ * that is the same trade deletePhotos already makes: orphaned storage rather
+ * than a delete that cannot complete. The caller is expected to have
+ * confirmed with the photographer first; nothing here is recoverable.
+ */
+export async function deleteCollection(id: string): Promise<void> {
+  const { error } = await createAdminClient().from('collections').delete().eq('id', id);
+  if (error) throw new Error(`deleteCollection: ${error.message}`);
+}
+
 export async function deleteGallery(id: string): Promise<void> {
   const { error } = await createAdminClient().from('galleries').delete().eq('id', id);
   if (error) throw new Error(`deleteGallery: ${error.message}`);

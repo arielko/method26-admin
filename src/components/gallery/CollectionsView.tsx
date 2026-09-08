@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ImageOff, Plus } from 'lucide-react';
+import { ImageOff, Plus, Share2, Trash2 } from 'lucide-react';
 import type { Collection } from '@/lib/gallery/types';
 import { PhotoThumb } from './PhotoThumb';
 
@@ -16,6 +16,7 @@ export function CollectionsView({
   coverPhotoIds: Record<string, string>;
 }) {
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,34 @@ export function CollectionsView({
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function remove(id: string, name: string, count: number) {
+    // Everything under the shoot cascades — every photograph, and every
+    // gallery link already in a client's inbox stops resolving. Nothing here
+    // is recoverable, so the confirmation says exactly what goes.
+    const warning =
+      `Delete "${name}"?\n\n` +
+      `This permanently removes ${count} photograph${count === 1 ? '' : 's'}, every folder, and every ` +
+      `gallery link for this shoot — including links already sent to clients, which will stop working.\n\n` +
+      `This cannot be undone.`;
+    if (!confirm(warning)) return;
+
+    setDeletingId(id);
+    setError(null);
+    try {
+      const response = await fetch('/api/gallery/collections', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error(`Could not delete the shoot (${response.status})`);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -117,11 +146,15 @@ export function CollectionsView({
             const coverId = coverPhotoIds[collection.id];
             const count = photoCounts[collection.id] ?? 0;
             return (
-              <li key={collection.id}>
+              // `relative`, with the actions as siblings of the card button
+              // rather than inside it: a <button> cannot legally contain
+              // another button, and nesting them would make every Delete
+              // click also open the shoot.
+              <li key={collection.id} className="group relative">
                 <button
                   type="button"
                   onClick={() => router.push(`/gallery/${collection.id}`)}
-                  className="group flex w-full flex-col border border-stone bg-white text-left transition-colors hover:border-ink"
+                  className="flex w-full flex-col border border-stone bg-white text-left transition-colors hover:border-ink"
                 >
                   {/* Cover photograph fills the top of the card — the single
                       biggest visual gap the owner called out: this view used
@@ -146,9 +179,37 @@ export function CollectionsView({
                         {count} photo{count === 1 ? '' : 's'}
                       </p>
                     </div>
-                    <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-amber opacity-0 transition-opacity group-hover:opacity-100" />
+                    {/* Space the actions sit over, so the name never reflows
+                        when they appear. */}
+                    <span aria-hidden className="h-7 w-16 shrink-0" />
                   </div>
                 </button>
+
+                {/* Revealed on hover, and by keyboard focus — hover-only would
+                    put Share and Delete permanently out of reach of anyone
+                    tabbing through, and focus-within is what makes the reveal
+                    survive the focus landing on them. */}
+                <div className="absolute bottom-4 right-4 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/gallery/${collection.id}?view=galleries`)}
+                    title="Share"
+                    aria-label={`Share ${collection.name}`}
+                    className="p-1.5 text-ink transition-colors hover:bg-paper"
+                  >
+                    <Share2 className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(collection.id, collection.name, count)}
+                    disabled={deletingId === collection.id}
+                    title="Delete shoot"
+                    aria-label={`Delete ${collection.name}`}
+                    className="p-1.5 text-red-600 transition-colors hover:bg-paper disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
               </li>
             );
           })}

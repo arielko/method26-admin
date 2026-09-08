@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronDown,
   Globe,
@@ -57,7 +57,15 @@ export function CollectionDetail({
   galleries: Gallery[];
   hidden: Record<string, string[]>;
 }) {
-  const [view, setView] = useState<View>('photos');
+  // ?view=galleries lets the Share action on a collection card land straight
+  // on the gallery links instead of the photo grid. Read once, as the initial
+  // value — this is a starting point, not a controlled binding, so switching
+  // tabs afterwards must not fight the URL.
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<View>(() => {
+    const requested = searchParams.get('view');
+    return requested === 'galleries' || requested === 'analytics' ? requested : 'photos';
+  });
   const [activeFolderId, setActiveFolderId] = useState<string | undefined>(undefined);
   const [sortBy, setSortBy] = useState<SortOption>('filename-asc');
   const [showSortMenu, setShowSortMenu] = useState(false);
