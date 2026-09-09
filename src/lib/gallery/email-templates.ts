@@ -168,7 +168,7 @@ function button(href: string, label: string): string {
 </table>`;
 }
 
-export type GalleryEmailVariant = 'proofing' | 'finals';
+export type GalleryEmailVariant = 'proofing' | 'finals' | 'files';
 
 // The copy each variant sends when the studio doesn't write its own. The
 // share screen prefills its Subject and Message fields from exactly this, so
@@ -191,6 +191,15 @@ export const GALLERY_EMAIL_DEFAULTS: Record<
     heading: 'Your retouched photos are ready',
     body: 'Hi there,\n\nGreat news — your retouched photos are ready for download! Click the button below to access your gallery and save your final images.\n\nWe hope you love them!\n\nBest,\nmethod26',
     cta: 'Download photos',
+  },
+  // A transfer, not a shoot. Same template, different job: no picking, no
+  // retouching, just files somebody needs.
+  files: {
+    label: 'Send files',
+    subject: 'Files from method26',
+    heading: 'Here are your files',
+    body: 'Hi there,\n\nHere are the files, ready to download. Click the button below to get them.\n\nBest,\nmethod26',
+    cta: 'Download files',
   },
 };
 

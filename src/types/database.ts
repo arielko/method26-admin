@@ -8,6 +8,13 @@
 //
 // Regenerate with the command above after any migration. The migrations
 // themselves live in the site repository, which owns the schema.
+//
+// The file_drops / drop_files / drop_emails blocks below were written by hand
+// to match 0004_file_drops.sql, because that migration had not been applied
+// when the code using it was written. Regenerate from the live project once
+// it has been, and delete this note — a hand-written type that has drifted
+// from the database typechecks perfectly and fails at runtime, which is the
+// exact failure the note at the top of this file is about.
 
 export type Json =
   | string
@@ -221,6 +228,115 @@ export type Database = {
             columns: ["gallery_id"]
             isOneToOne: false
             referencedRelation: "galleries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_drops: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          message: string | null
+          title: string | null
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          message?: string | null
+          title?: string | null
+          token: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          message?: string | null
+          title?: string | null
+          token?: string
+        }
+        Relationships: []
+      }
+      drop_files: {
+        Row: {
+          content_type: string
+          created_at: string
+          drop_id: string
+          file_size_bytes: number | null
+          filename: string
+          id: string
+          object_key: string
+          sort_order: number
+        }
+        Insert: {
+          content_type: string
+          created_at?: string
+          drop_id: string
+          file_size_bytes?: number | null
+          filename: string
+          id?: string
+          object_key: string
+          sort_order?: number
+        }
+        Update: {
+          content_type?: string
+          created_at?: string
+          drop_id?: string
+          file_size_bytes?: number | null
+          filename?: string
+          id?: string
+          object_key?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drop_files_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "file_drops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drop_emails: {
+        Row: {
+          drop_id: string
+          error: string | null
+          id: string
+          provider_id: string | null
+          recipient: string
+          sent_at: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          drop_id: string
+          error?: string | null
+          id?: string
+          provider_id?: string | null
+          recipient: string
+          sent_at?: string
+          status: string
+          subject: string
+        }
+        Update: {
+          drop_id?: string
+          error?: string | null
+          id?: string
+          provider_id?: string | null
+          recipient?: string
+          sent_at?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drop_emails_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "file_drops"
             referencedColumns: ["id"]
           },
         ]
