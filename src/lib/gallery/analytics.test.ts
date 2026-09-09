@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankConsensus, groupFavoritesByVisitor, countByVisitor, bucketActivityByDay } from './analytics.ts';
+import {
+  rankConsensus,
+  splitConsensus,
+  groupFavoritesByVisitor,
+  countByVisitor,
+  bucketActivityByDay,
+} from './analytics.ts';
 
 test('rankConsensus counts distinct visitors per photo, not raw favorite rows', () => {
   const ranked = rankConsensus([
@@ -110,4 +116,35 @@ test('bucketActivityByDay fills every day with zero, not a gap, when there is no
   const buckets = bucketActivityByDay([], [], 3, new Date('2026-01-15T12:00:00Z'));
   assert.deepEqual(buckets.every((b) => b.views === 0 && b.downloads === 0), true);
   assert.equal(buckets.length, 3);
+});
+
+// Argento shows two blocks — "Overlaps" (2+ votes, the badge counts these)
+// and "All Other Likes" (a single vote each). Method26 rendered one grid of
+// everything under a badge reading "N photos liked by 2+", so a link where
+// four people each picked a different frame reported "4 photos liked by 2+".
+test('splitConsensus separates frames with two or more votes from single votes', () => {
+  const { overlaps, singles } = splitConsensus([
+    { photoId: 'p1', likeCount: 3, visitorIds: ['a', 'b', 'c'] },
+    { photoId: 'p2', likeCount: 2, visitorIds: ['a', 'b'] },
+    { photoId: 'p3', likeCount: 1, visitorIds: ['a'] },
+  ]);
+  assert.deepEqual(overlaps.map((f) => f.photoId), ['p1', 'p2']);
+  assert.deepEqual(singles.map((f) => f.photoId), ['p3']);
+});
+
+test('splitConsensus: every frame at one vote leaves overlaps empty', () => {
+  const { overlaps, singles } = splitConsensus([
+    { photoId: 'p1', likeCount: 1, visitorIds: ['a'] },
+    { photoId: 'p2', likeCount: 1, visitorIds: ['b'] },
+  ]);
+  assert.deepEqual(overlaps, []);
+  assert.equal(singles.length, 2);
+});
+
+test('splitConsensus preserves the ranking it was given', () => {
+  const { overlaps } = splitConsensus([
+    { photoId: 'p1', likeCount: 5, visitorIds: [] },
+    { photoId: 'p2', likeCount: 2, visitorIds: [] },
+  ]);
+  assert.deepEqual(overlaps.map((f) => f.likeCount), [5, 2]);
 });

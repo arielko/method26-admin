@@ -11,6 +11,8 @@ import type {
   DownloadLogEntry,
   GalleryEmail,
 } from '@/lib/gallery/queries';
+import { splitConsensus } from '@/lib/gallery/analytics';
+import { captureNotice, type AttributionTab } from '@/lib/gallery/attribution';
 import { PhotoThumb } from './PhotoThumb';
 
 type AnalyticsTab = 'overview' | 'favorites' | 'consensus' | 'visitors' | 'downloads' | 'emails';
@@ -33,6 +35,64 @@ function formatBytes(bytes: number): string {
 
 function csvField(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+// One banner shape for all three tabs. Renders nothing when there is
+// nothing honest to say — see attribution.ts for which claim is safe when.
+function CaptureNotice({
+  tab,
+  emailCaptureEnabled,
+  attributed,
+  unattributed,
+}: {
+  tab: AttributionTab;
+  emailCaptureEnabled: boolean;
+  attributed: number;
+  unattributed: number;
+}) {
+  const notice = captureNotice(tab, { emailCaptureEnabled, attributed, unattributed });
+  if (!notice) return null;
+  return (
+    <p className="border border-stone bg-white px-4 py-3 text-[12px] text-ink">{notice}</p>
+  );
+}
+
+// One frame in the consensus grid. Amber-bordered when two or more people
+// picked it, plain when it is a single vote.
+function ConsensusCard({ frame, isOverlap }: { frame: ConsensusFrame; isOverlap: boolean }) {
+  return (
+    <li className={`relative border bg-white ${isOverlap ? 'border-amber' : 'border-stone'}`}>
+      <div className="aspect-[4/3] overflow-hidden border-b border-stone">
+        <PhotoThumb photoId={frame.photoId} alt={frame.filename} className="h-full w-full object-cover" />
+      </div>
+      {/* The vote count as a badge on the frame, so a glance across the grid
+          ranks it without reading captions. Amber is the ground with ink on
+          it — amber is 2.84:1 and cannot carry text itself. */}
+      <span
+        className={`absolute right-2 top-2 flex items-center gap-1 px-1.5 py-0.5 font-mono text-[11px] text-ink ${
+          isOverlap ? 'bg-amber' : 'bg-paper'
+        }`}
+      >
+        <Heart className="h-3 w-3 fill-ink" aria-hidden />
+        {frame.likeCount}
+      </span>
+      <div className="p-2">
+        <p className="truncate font-mono text-[10px] text-ink" title={frame.filename}>
+          {frame.filename}
+        </p>
+        {/* Initials, not full names: at six columns a name list wraps or
+            truncates to uselessness, and the full list is one hover away. */}
+        <p
+          className="mt-0.5 truncate font-mono text-[10px] text-ink/70"
+          title={frame.likedBy.map((v) => `${v.firstName} ${v.lastName}`).join(', ')}
+        >
+          {frame.likedBy
+            .map((v) => `${v.firstName[0] ?? ''}${v.lastName[0] ?? ''}`.toUpperCase())
+            .join(', ')}
+        </p>
+      </div>
+    </li>
+  );
 }
 
 // Reference: GalleryAnalytics.tsx — six tabs, an Overview stat-card row
@@ -70,6 +130,21 @@ export function AnalyticsPanel({
     if (q.length === 0) return consensus;
     return consensus.filter((frame) => frame.filename.toLowerCase().includes(q));
   }, [consensus, consensusQuery]);
+
+  // Overlaps are the retouch set; singles are still somebody's pick and are
+  // shown under their own heading rather than counted into "liked by 2+".
+  const { overlaps, singles } = useMemo(() => splitConsensus(visibleConsensus), [visibleConsensus]);
+
+  // How many rows on each tab actually carry a visitor identity. The
+  // notices below read this, not the setting alone — see attribution.ts.
+  const attributedFavorites = useMemo(
+    () => favoriteGroups.filter((g) => g.visitor !== null).length,
+    [favoriteGroups]
+  );
+  const attributedConsensus = useMemo(
+    () => consensus.filter((f) => f.likedBy.length > 0).length,
+    [consensus]
+  );
 
   const storageBytes = useMemo(
     () => photos.reduce((sum, p) => sum + (p.file_size_bytes ?? 0), 0),
@@ -235,12 +310,12 @@ export function AnalyticsPanel({
 
       {!loading && tab === 'favorites' && (
         <div className="flex flex-col gap-4">
-          {!emailCaptureEnabled && (
-            <p className="border border-stone bg-white px-4 py-3 text-[12px] text-ink">
-              Email capture is off for this link — favorites are recorded but cannot be attributed to a
-              visitor. Turn it on under Galleries → Settings → Access to see who picked what.
-            </p>
-          )}
+          <CaptureNotice
+            tab="favorites"
+            emailCaptureEnabled={emailCaptureEnabled}
+            attributed={attributedFavorites}
+            unattributed={favoriteGroups.length - attributedFavorites}
+          />
           {favoriteGroups.length === 0 ? (
             <p className="text-[13px] text-ink">No favorites marked on this link yet.</p>
           ) : (
@@ -290,12 +365,12 @@ export function AnalyticsPanel({
             Ranked by how many different visitors picked each frame — this is the set the studio
             retouches from.
           </p>
-          {!emailCaptureEnabled && (
-            <p className="border border-stone bg-white px-4 py-3 text-[12px] text-ink">
-              Email capture is off for this link, so favorites here carry no visitor identity — consensus
-              cannot be computed until visitors are known.
-            </p>
-          )}
+          <CaptureNotice
+            tab="consensus"
+            emailCaptureEnabled={emailCaptureEnabled}
+            attributed={attributedConsensus}
+            unattributed={consensus.length - attributedConsensus}
+          />
           {consensus.length > 0 && (
             <label className="flex items-center gap-2 border border-stone bg-white px-3 py-2">
               <Search className="h-3.5 w-3.5 shrink-0 text-ink/60" aria-hidden />
@@ -311,52 +386,54 @@ export function AnalyticsPanel({
           )}
 
           {consensus.length === 0 ? (
-            <p className="text-[13px] text-ink">No frames with more than one identified favorite yet.</p>
+            <p className="text-[13px] text-ink">No identified favorites on this link yet.</p>
           ) : visibleConsensus.length === 0 ? (
             <p className="text-[13px] text-ink">
               Nothing matches “{consensusQuery}”.
             </p>
           ) : (
             <>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-ink">Overlaps</p>
-                <span className="bg-amber/15 px-2 py-0.5 font-mono text-[11px] text-ink">
-                  {visibleConsensus.length} photo{visibleConsensus.length === 1 ? '' : 's'} liked by 2+
-                </span>
-              </div>
-              <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
-                {visibleConsensus.map((frame) => (
-                  <li key={frame.photoId} className="relative border border-amber bg-white">
-                    <div className="aspect-[4/3] overflow-hidden border-b border-stone">
-                      <PhotoThumb photoId={frame.photoId} alt={frame.filename} className="h-full w-full object-cover" />
-                    </div>
-                    {/* The vote count as a badge on the frame, so a glance
-                        across the grid ranks it without reading captions.
-                        Amber is the ground with ink on it — amber is 2.84:1
-                        and cannot carry text itself. */}
-                    <span className="absolute right-2 top-2 flex items-center gap-1 bg-amber px-1.5 py-0.5 font-mono text-[11px] text-ink">
-                      <Heart className="h-3 w-3 fill-ink" aria-hidden />
-                      {frame.likeCount}
+              {/* Agreement first. The badge counts overlaps ONLY — it used to
+                  sit over a grid of everything and report every single-vote
+                  frame as "liked by 2+", so four people each picking a
+                  different frame read as four-way agreement. */}
+              {overlaps.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-ink">Overlaps</p>
+                    <span className="bg-amber/15 px-2 py-0.5 font-mono text-[11px] text-ink">
+                      {overlaps.length} photo{overlaps.length === 1 ? '' : 's'} liked by 2+
                     </span>
-                    <div className="p-2">
-                      <p className="truncate font-mono text-[10px] text-ink" title={frame.filename}>
-                        {frame.filename}
-                      </p>
-                      {/* Initials, not full names: at six columns a name list
-                          wraps or truncates to uselessness, and the full list
-                          is one hover away. */}
-                      <p
-                        className="mt-0.5 truncate font-mono text-[10px] text-ink/70"
-                        title={frame.likedBy.map((v) => `${v.firstName} ${v.lastName}`).join(', ')}
-                      >
-                        {frame.likedBy
-                          .map((v) => `${v.firstName[0] ?? ''}${v.lastName[0] ?? ''}`.toUpperCase())
-                          .join(', ')}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                  <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+                    {overlaps.map((frame) => (
+                      <ConsensusCard key={frame.photoId} frame={frame} isOverlap />
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* A single vote is still somebody's pick, and the studio still
+                  needs to see it — just not counted as agreement. Stone
+                  border rather than amber keeps the two blocks separable at
+                  a glance. */}
+              {singles.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-ink">
+                      All other likes
+                    </p>
+                    <span className="bg-paper px-2 py-0.5 font-mono text-[11px] text-ink">
+                      {singles.length} photo{singles.length === 1 ? '' : 's'} liked by one person
+                    </span>
+                  </div>
+                  <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+                    {singles.map((frame) => (
+                      <ConsensusCard key={frame.photoId} frame={frame} isOverlap={false} />
+                    ))}
+                  </ul>
+                </>
+              )}
             </>
           )}
         </div>
@@ -364,12 +441,12 @@ export function AnalyticsPanel({
 
       {!loading && tab === 'visitors' && (
         <div className="flex flex-col gap-3">
-          {!emailCaptureEnabled && (
-            <p className="border border-stone bg-white px-4 py-3 text-[12px] text-ink">
-              Email capture is off for this link — no visitor identities are collected, so no one will
-              appear here.
-            </p>
-          )}
+          <CaptureNotice
+            tab="visitors"
+            emailCaptureEnabled={emailCaptureEnabled}
+            attributed={visitors.length}
+            unattributed={0}
+          />
           <div className="flex justify-end">
             <button
               type="button"

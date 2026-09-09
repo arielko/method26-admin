@@ -317,10 +317,25 @@ export async function getGallery(id: string): Promise<Gallery | null> {
   return data as Gallery | null;
 }
 
+// email_capture_enabled is set here rather than left to the column default
+// (false). A proofing link's whole point is that the studio learns who
+// picked what: Favorites groups by person, and Consensus ranks a frame by
+// how many DIFFERENT people chose it — both read visitor_id, and both are
+// inert on a link that never asks who the visitor is. Born-off meant every
+// new link arrived with those two tabs showing a "cannot be attributed"
+// notice instead of the client's picks, and the studio had to know to go
+// turn it on before sending the link. Downloads stay off by default —
+// that one gives away originals, which is a real decision.
 export async function createGallery(collectionId: string, name: string): Promise<Gallery> {
   const { data, error } = await createAdminClient()
     .from('galleries')
-    .insert({ collection_id: collectionId, name, token: newGalleryToken(), is_published: false })
+    .insert({
+      collection_id: collectionId,
+      name,
+      token: newGalleryToken(),
+      is_published: false,
+      email_capture_enabled: true,
+    })
     .select(GALLERY_COLUMNS).single();
   if (error) throw new Error(`createGallery: ${error.message}`);
   return data as Gallery;

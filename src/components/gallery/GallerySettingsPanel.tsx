@@ -186,8 +186,9 @@ export function GallerySettingsPanel({
             <span>
               <span className="block text-[14px] font-medium text-ink">Require name and email</span>
               <span className="mt-1 block text-[12px] text-ink">
-                Visitors enter their name and email before viewing. Off by default — this is the proofing
-                link, not a delivery gate.
+                Visitors enter their name and email before viewing. On by default: it is what lets
+                Analytics show which client picked which frame, and rank the frames more than one
+                person chose. Off, favorites still record — but no name is attached to them.
               </span>
             </span>
             <input

@@ -38,6 +38,22 @@ export function rankConsensus(favorites: FavoriteRow[]): ConsensusEntry[] {
     .sort((a, b) => b.likeCount - a.likeCount || a.photoId.localeCompare(b.photoId));
 }
 
+// Argento presents consensus as two blocks: "Overlaps" — frames two or more
+// people picked, which is the set the studio actually retouches from — and
+// "All Other Likes" for the single votes, still worth seeing but not
+// agreement. One flat grid under a badge reading "liked by 2+" counts the
+// singles into that claim and overstates the overlap.
+//
+// Order is preserved: rankConsensus has already sorted most-liked first.
+export function splitConsensus<T extends { likeCount: number }>(
+  ranked: T[]
+): { overlaps: T[]; singles: T[] } {
+  return {
+    overlaps: ranked.filter((frame) => frame.likeCount >= 2),
+    singles: ranked.filter((frame) => frame.likeCount === 1),
+  };
+}
+
 export type GroupedFavorites = {
   // One entry per visitor who favorited at least one frame.
   byVisitor: { visitorId: string; photoIds: string[] }[];

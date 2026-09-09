@@ -59,12 +59,20 @@ test('consensus shows the vote count on the frame itself', () => {
   assert.match(panel, /absolute right-2 top-2/, 'as a badge, readable at a glance across the grid');
   // Amber is 2.84:1 and cannot carry text — it is the badge's ground, with
   // ink on top.
-  assert.match(panel, /bg-amber px-1\.5 py-0\.5 font-mono text-\[11px\] text-ink/);
+  assert.match(panel, /px-1\.5 py-0\.5 font-mono text-\[11px\] text-ink/);
+  assert.match(panel, /isOverlap \? 'bg-amber' : 'bg-paper'/, 'amber is the ground, never the text');
   // JSX interpolation is `{...}`, not `${...}` — this is markup, not a
   // template literal.
   // Counts what is on screen, not what was fetched — with a filter applied
-  // the header must agree with the grid under it.
-  assert.match(panel, /photo\{visibleConsensus\.length === 1 \? '' : 's'\} liked by 2\+/);
+  // the header must agree with the grid under it. `overlaps`, not
+  // `visibleConsensus`: the badge claims two-or-more, so counting the whole
+  // filtered set reported every single-vote frame as agreement.
+  assert.match(panel, /photo\{overlaps\.length === 1 \? '' : 's'\} liked by 2\+/);
+  assert.match(
+    panel,
+    /photo\{singles\.length === 1 \? '' : 's'\} liked by one person/,
+    'single votes get their own block rather than padding the overlap count'
+  );
 });
 
 test('consensus can be searched by filename or frame number', () => {
@@ -74,8 +82,11 @@ test('consensus can be searched by filename or frame number', () => {
   assert.match(panel, /const \[consensusQuery, setConsensusQuery\] = useState\(''\)/);
   assert.match(panel, /frame\.filename\.toLowerCase\(\)\.includes\(q\)/);
   assert.match(panel, /placeholder="Search by filename or number…"/);
-  // The grid renders the filtered set, not the full one.
-  assert.match(panel, /\{visibleConsensus\.map\(\(frame\) =>/);
+  // The grids render the filtered set, not the full one — both blocks are
+  // split out of visibleConsensus, so the search reaches each of them.
+  assert.match(panel, /splitConsensus\(visibleConsensus\)/);
+  assert.match(panel, /\{overlaps\.map\(\(frame\) =>/);
+  assert.match(panel, /\{singles\.map\(\(frame\) =>/);
   // And says so when a search matches nothing, rather than showing an empty
   // grid that reads as "no consensus yet".
   assert.match(panel, /Nothing matches/);
@@ -86,6 +97,6 @@ test('photograph grids are sized by tile, not by column count', () => {
   // size of the reference's on the same monitor. A minimum tile width holds
   // the frame size steady and lets the column count follow the window.
   const grids = panel.match(/grid-template-columns:repeat\(auto-fill,minmax\(220px,1fr\)\)/g) ?? [];
-  assert.equal(grids.length, 2, 'favorites and consensus both');
+  assert.equal(grids.length, 3, 'favorites, consensus overlaps, and consensus singles');
   assert.ok(!/lg:grid-cols-6/.test(panel), 'no fixed six-column grids left');
 });
