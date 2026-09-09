@@ -9,7 +9,12 @@ test('only the gallery module and login remain', () => {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
-  assert.deepEqual(routes, ['api', 'gallery', 'login']);
+  // Pinned as an exact set, not a subset: this guards against a stripped
+  // fork module (crm, social, brand, content) reappearing, and a subset
+  // check would let one back in silently. Adding a route deliberately means
+  // adding it here — 'send' is Send Files, built for this studio, not
+  // inherited.
+  assert.deepEqual(routes, ['api', 'gallery', 'login', 'send']);
 });
 
 test('no stripped module survives anywhere in the tree', () => {
