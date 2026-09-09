@@ -43,11 +43,17 @@ export function Sidebar() {
     >
       {/* Wordmark + collapse toggle */}
       <div className={`flex items-center px-3 mb-6 ${collapsed ? 'flex-col gap-3' : 'justify-between'}`}>
-        <Link href="/gallery" className="flex items-center gap-2.5 px-1.5" title="method26">
-          <span className="w-6 h-6 bg-ink text-paper text-[11px] font-bold flex items-center justify-center shrink-0">
-            B
-          </span>
-          {!collapsed && <span className="text-[14px] font-semibold text-ink">method26</span>}
+        {/* The mark, not a letter and a word. Plain <img> rather than
+            next/image: these are static SVGs served straight from public/,
+            and image optimisation has nothing to do for them. The lockup
+            carries the wordmark, so no text sits beside it; collapsed, the
+            disc alone is the mark. */}
+        <Link href="/gallery" className="flex items-center px-1.5" title="method26">
+          {collapsed ? (
+            <img src="/logo-disc.svg" alt="method26" className="h-6 w-6 shrink-0" />
+          ) : (
+            <img src="/logo-lockup.svg" alt="method26" className="h-5 w-auto" />
+          )}
         </Link>
         <button
           onClick={toggleCollapsed}
