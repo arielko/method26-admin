@@ -94,3 +94,28 @@ test('content type is bound for a whole object and not for a part', () => {
   const generic = r2.slice(r2.indexOf('export async function presign('), r2.indexOf('export const PART_URL_EXPIRY'));
   assert.match(generic, /'X-Amz-SignedHeaders': 'host'/, 'presign does not');
 });
+
+const form = stripComments(readFileSync('src/components/drops/SendFilesForm.tsx', 'utf8'));
+
+test('the title is suggested from the filenames', () => {
+  assert.match(form, /function titleFromFiles\(names: string\[\]\): string/);
+  // The extension is noise in a heading; the file list below shows the real
+  // names.
+  assert.match(form, /\.replace\(\/\\\.\[A-Za-z0-9\]\{1,12\}\$\/, ''\)/);
+  // With several files, the first plus a count says more than a bare number.
+  assert.match(form, /names\.length === 1 \? stem : `\$\{stem\} \+\$\{names\.length - 1\} more`/);
+});
+
+test('a suggested title never overwrites one that was typed', () => {
+  // A suggestion that silently replaces what somebody wrote is worse than no
+  // suggestion at all.
+  assert.match(form, /const \[titleEdited, setTitleEdited\] = useState\(false\)/);
+  assert.match(form, /if \(!titleEdited\) setTitle\(titleFromFiles/);
+  assert.match(form, /setTitleEdited\(true\)/, 'typing marks it as the studio\'s own');
+  assert.match(form, /setTitleEdited\(false\)/, 'and a fresh transfer starts fresh');
+});
+
+test('the suggestion covers every file, not just the last batch', () => {
+  // Adding a second file should update the count rather than start over.
+  assert.match(form, /setTitle\(titleFromFiles\(next\.map\(\(f\) => f\.filename\)\)\)/);
+});

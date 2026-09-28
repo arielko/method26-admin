@@ -11,6 +11,20 @@ const EXPIRY_CHOICES = [
   { days: null, label: 'Never' },
 ] as const;
 
+/**
+ * A title suggested from the filenames, the way a transfer service does it.
+ *
+ * The extension is dropped because it is noise in a heading — the file list
+ * below already shows the real names. With several files the first one plus a
+ * count says more than a bare number would: "Jewel Case Mockup +3 more" tells
+ * the recipient what they are looking at, "4 files" does not.
+ */
+function titleFromFiles(names: string[]): string {
+  if (names.length === 0) return '';
+  const stem = names[0].replace(/\.[A-Za-z0-9]{1,12}$/, '').trim() || names[0];
+  return names.length === 1 ? stem : `${stem} +${names.length - 1} more`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
@@ -34,6 +48,10 @@ export function SendFilesForm() {
   const [recipients, setRecipients] = useState<string[]>([]);
   const [entry, setEntry] = useState('');
   const [title, setTitle] = useState('');
+  // Whether the title was typed rather than derived from the filenames. Once
+  // it is, adding more files must not overwrite it — a suggestion that
+  // silently replaces what somebody wrote is worse than no suggestion.
+  const [titleEdited, setTitleEdited] = useState(false);
   const [message, setMessage] = useState('');
   const [expiresInDays, setExpiresInDays] = useState<number | null>(7);
 
@@ -64,10 +82,16 @@ export function SendFilesForm() {
     try {
       const id = await ensureDrop();
       const result = await uploadDropFiles(id, chosen, setProgress);
-      setFiles((current) => [
-        ...current,
-        ...result.succeeded.map((f) => ({ id: f.id, filename: f.filename, file_size_bytes: f.file_size_bytes })),
-      ]);
+      setFiles((current) => {
+        const next = [
+          ...current,
+          ...result.succeeded.map((f) => ({ id: f.id, filename: f.filename, file_size_bytes: f.file_size_bytes })),
+        ];
+        // Derived from everything uploaded so far, not just this batch, so
+        // adding a second file updates the count rather than starting over.
+        if (!titleEdited) setTitle(titleFromFiles(next.map((f) => f.filename)));
+        return next;
+      });
       if (result.failed.length > 0) {
         setError(
           `${result.failed.length} file${result.failed.length === 1 ? '' : 's'} did not upload: ` +
@@ -138,6 +162,7 @@ export function SendFilesForm() {
     setRecipients([]);
     setEntry('');
     setTitle('');
+    setTitleEdited(false);
     setMessage('');
     setSent(null);
     setError(null);
@@ -277,7 +302,15 @@ export function SendFilesForm() {
 
       <label className="flex flex-col gap-1.5">
         <span className="text-[11px] uppercase tracking-wide text-ink">Title</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Optional" className="w-full text-[14px]" />
+        <input
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setTitleEdited(true);
+          }}
+          placeholder={files.length === 0 ? 'Optional — filled in from the files' : 'Optional'}
+          className="w-full text-[14px]"
+        />
       </label>
 
       <label className="flex flex-col gap-1.5">
