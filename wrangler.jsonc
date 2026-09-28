@@ -88,6 +88,14 @@
     // The public gallery site has no custom domain yet — method26.com still
     // serves the old WordPress site, so every share link built from that
     // value 404'd. It actually lives at its own workers.dev URL.
-    "NEXT_PUBLIC_SITE_URL": "https://method26.com"
+    "NEXT_PUBLIC_SITE_URL": "https://method26.com",
+
+    // R2 for transfers. Neither of these is a secret — the account id is in
+    // every dashboard URL and the bucket name is not a credential — so they
+    // live here rather than as secrets, where they are visible to anyone
+    // reading the config and cannot drift from what is deployed.
+    // R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are secrets.
+    "R2_ACCOUNT_ID": "6a558035221c855aeab2bd4c8042706c",
+    "R2_BUCKET": "method26-transfers"
   }
 }
