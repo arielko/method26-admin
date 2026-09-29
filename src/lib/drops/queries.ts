@@ -57,23 +57,43 @@ export async function getDrop(id: string): Promise<FileDrop | null> {
   return (data as FileDrop) ?? null;
 }
 
-export async function listDrops(limit = 20): Promise<(FileDrop & { fileCount: number })[]> {
+export async function listDrops(
+  limit = 20
+): Promise<(FileDrop & { fileCount: number; collectors: number; lastDownloadAt: string | null })[]> {
   const client = createAdminClient();
   const { data, error } = await client
     .from('file_drops')
-    .select('id,token,title,message,created_at,expires_at,drop_files(id)')
+    .select('id,token,title,message,created_at,expires_at,drop_files(id),drop_downloads(visitor_hash,downloaded_at)')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw new Error(`listDrops: ${error.message}`);
-  return (data as (FileDrop & { drop_files: { id: string }[] })[]).map((row) => ({
-    id: row.id,
-    token: row.token,
-    title: row.title,
-    message: row.message,
-    created_at: row.created_at,
-    expires_at: row.expires_at,
-    fileCount: row.drop_files.length,
-  }));
+  return (
+    data as (FileDrop & {
+      drop_files: { id: string }[];
+      drop_downloads: { visitor_hash: string; downloaded_at: string }[];
+    })[]
+  ).map((row) => {
+    // Distinct people, not rows. A download row is written per file, so a
+    // three-file transfer collected once by one recipient leaves three rows —
+    // reporting "3" there would read as three separate collections and make
+    // "has anyone picked this up?" impossible to answer at a glance.
+    const collectors = new Set(row.drop_downloads.map((d) => d.visitor_hash)).size;
+    const lastDownloadAt = row.drop_downloads.reduce<string | null>(
+      (latest, d) => (latest === null || d.downloaded_at > latest ? d.downloaded_at : latest),
+      null
+    );
+    return {
+      id: row.id,
+      token: row.token,
+      title: row.title,
+      message: row.message,
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+      fileCount: row.drop_files.length,
+      collectors,
+      lastDownloadAt,
+    };
+  });
 }
 
 export async function dropExists(id: string): Promise<boolean> {

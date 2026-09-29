@@ -87,6 +87,48 @@ export type Database = {
           },
         ]
       }
+      drop_downloads: {
+        Row: {
+          country: string | null
+          downloaded_at: string
+          drop_id: string
+          file_id: string
+          id: string
+          visitor_hash: string
+        }
+        Insert: {
+          country?: string | null
+          downloaded_at?: string
+          drop_id: string
+          file_id: string
+          id?: string
+          visitor_hash: string
+        }
+        Update: {
+          country?: string | null
+          downloaded_at?: string
+          drop_id?: string
+          file_id?: string
+          id?: string
+          visitor_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drop_downloads_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "file_drops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drop_downloads_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "drop_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       drop_files: {
         Row: {
           content_type: string

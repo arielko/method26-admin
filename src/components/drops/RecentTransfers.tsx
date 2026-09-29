@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, Check, ExternalLink, Trash2 } from 'lucide-react';
+import { Copy, Check, ExternalLink, Trash2, Download } from 'lucide-react';
 
 type Row = {
   id: string;
@@ -11,6 +11,8 @@ type Row = {
   created_at: string;
   expires_at: string | null;
   fileCount: number;
+  collectors: number;
+  lastDownloadAt: string | null;
 };
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL as string;
@@ -66,6 +68,30 @@ export function RecentTransfers({ drops }: { drops: Row[] }) {
                   : drop.expires_at
                     ? `expires ${new Date(drop.expires_at).toLocaleDateString()}`
                     : 'no expiry'}
+              </p>
+              {/*
+                The question this page exists to answer between sending and
+                hearing back. Green when somebody has it, plain grey when
+                nobody has — not red, because "not yet collected" on a
+                transfer sent this morning is the normal state, not a fault.
+              */}
+              <p
+                className={`mt-0.5 flex items-center gap-1.5 font-mono text-[11px] ${
+                  drop.collectors > 0 ? 'text-green-700' : 'text-ink/50'
+                }`}
+              >
+                <Download className="h-3 w-3" aria-hidden="true" />
+                {drop.collectors === 0
+                  ? 'Not downloaded yet'
+                  : `Downloaded by ${drop.collectors} ${drop.collectors === 1 ? 'person' : 'people'}` +
+                    (drop.lastDownloadAt
+                      ? ` · last ${new Date(drop.lastDownloadAt).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}`
+                      : '')}
               </p>
             </div>
             <div className="flex items-center gap-1">
