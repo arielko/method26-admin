@@ -42,7 +42,10 @@ test('every remaining API route authenticates itself and enforces the result', (
   // there is no session — so they are listed here by name and checked against
   // their own idiom below. The list is exact: a new unprotected route does not
   // get to claim this exemption by accident, it has to be added deliberately.
-  const machineRoutes = ['src/app/api/drops/reminders/route.ts'];
+  const machineRoutes = [
+    'src/app/api/drops/reminders/route.ts',
+    'src/app/api/backup/route.ts',
+  ];
 
   const unprotected: string[] = [];
   function walk(dir: string) {
@@ -77,19 +80,21 @@ test('every remaining API route authenticates itself and enforces the result', (
   assert.deepEqual(unprotected, [], `routes that don't call-and-guard on auth: ${unprotected.join(', ')}`);
 
   // The exemption above is only safe if the exempted routes are in fact
-  // protected. Each must refuse when its secret is unset — an unset secret
-  // turning a route into an open mailer is the failure this guards — and must
-  // compare in constant time, because a route reachable by anyone on the
-  // internet is a route anyone can time.
+  // protected. Each must call the shared machine guard AND act on its result:
+  // importing it and ignoring the answer would pass a substring check while
+  // leaving the route open to anyone on the internet.
   for (const route of machineRoutes) {
     const source = readFileSync(route, 'utf8')
       .split('\n')
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n');
-    assert.match(source, /process\.env\.REMINDER_SECRET/, `${route} must read its shared secret`);
-    assert.match(source, /status:\s*503/, `${route} must refuse when the secret is unset`);
-    assert.match(source, /timingSafeEqual\(/, `${route} must compare the secret in constant time`);
-    assert.match(source, /status:\s*401/, `${route} must reject a wrong secret`);
+    const assigned = source.match(/const\s+(\w+)\s*=\s*authenticateMachine\(/);
+    assert.ok(assigned, `${route} must call authenticateMachine()`);
+    assert.match(
+      source,
+      new RegExp(`if\\s*\\(\\s*!${assigned[1]}\\.ok\\s*\\)\\s*return`),
+      `${route} must return early when authenticateMachine() refuses`
+    );
   }
 });
 
@@ -188,4 +193,48 @@ test('login redirects to a route that exists', () => {
     true,
     `login redirect target "${target}" must exist as a route (src/app${target}/page.tsx)`
   );
+});
+
+test('the machine guard fails closed and compares in constant time', () => {
+  // These two properties are why the routes above are allowed to skip session
+  // auth. An unset secret must refuse rather than wave everyone through, and
+  // a route anyone can reach is a route anyone can time.
+  const source = readFileSync('src/lib/api/machine-auth.ts', 'utf8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+  assert.match(source, /process\.env\.MAINTENANCE_SECRET/, 'must read the shared secret');
+  assert.match(source, /status:\s*503/, 'must refuse when the secret is unset');
+  assert.match(source, /status:\s*401/, 'must reject a wrong secret');
+  assert.doesNotMatch(
+    source,
+    /presented\s*===\s*expected|expected\s*===\s*presented/,
+    'must not compare the secret with ==='
+  );
+});
+
+test('every table in the schema is in the backup, or deliberately not', () => {
+  // A table added to the database and forgotten here would be absent from
+  // every backup, and nobody would find out until a restore. Discovering the
+  // schema from the generated types means adding a table breaks this test on
+  // the same commit that adds it.
+  const types = readFileSync('src/types/database.ts', 'utf8');
+  const schema = types
+    .split('\n')
+    .map((line) => line.match(/^ {6}([a-z_]+): \{$/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => m[1]);
+
+  const dump = readFileSync('src/lib/backup/dump.ts', 'utf8');
+  const backed = [...dump.matchAll(/^\s{2}'([a-z_]+)',$/gm)].map((m) => m[1]);
+
+  // Views and anything intentionally excluded go here with a reason. Empty
+  // for now: every table in this schema holds something a restore needs.
+  const deliberatelyExcluded: string[] = [];
+
+  const missing = schema.filter((t) => !backed.includes(t) && !deliberatelyExcluded.includes(t));
+  assert.deepEqual(missing, [], `tables missing from the backup: ${missing.join(', ')}`);
+
+  const unknown = backed.filter((t) => !schema.includes(t));
+  assert.deepEqual(unknown, [], `backup lists tables not in the schema: ${unknown.join(', ')}`);
 });

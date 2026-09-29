@@ -3,6 +3,7 @@ import { listDropsNeedingReminder, markReminderSent, recordDropEmail } from '@/l
 import { sendGalleryEmail } from '@/lib/gallery/mail';
 import { GALLERY_EMAIL_DEFAULTS } from '@/lib/gallery/email-templates';
 import { dropUrl } from '@/lib/drops/url';
+import { authenticateMachine } from '@/lib/api/machine-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,20 +17,12 @@ export const dynamic = 'force-dynamic';
  * morning for Supabase and is plain Worker code.
  *
  * This is the one route in the admin that sends mail without a logged-in
- * session, so it is the one route where a wrong guess mails clients. Hence
- * the shared secret, and hence the refusal to run at all when the secret is
- * unset — an unset secret must never degrade into an open endpoint.
+ * session, so it is the one route where a wrong guess mails clients. Its
+ * guard lives in machine-auth, shared with the backup route.
  */
 export async function POST(request: NextRequest) {
-  const expected = process.env.REMINDER_SECRET;
-  if (!expected) {
-    console.error('reminders: REMINDER_SECRET is unset');
-    return NextResponse.json({ error: 'Reminders are not configured' }, { status: 503 });
-  }
-  const presented = request.headers.get('x-reminder-secret') ?? '';
-  if (!timingSafeEqual(presented, expected)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = authenticateMachine(request);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const due = await listDropsNeedingReminder();
   const sent: { token: string; recipients: number }[] = [];
@@ -77,21 +70,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, reminded: sent.length, sent });
-}
-
-/**
- * Compares without leaking, through timing, how much of the secret is right.
- *
- * Length is compared first and the loop still runs over a fixed buffer, so a
- * wrong-length guess costs the same as a wrong-value one.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  const encoder = new TextEncoder();
-  const left = encoder.encode(a);
-  const right = encoder.encode(b);
-  let diff = left.length ^ right.length;
-  for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
-  }
-  return diff === 0;
 }
