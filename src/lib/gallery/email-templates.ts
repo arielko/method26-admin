@@ -168,7 +168,7 @@ function button(href: string, label: string): string {
 </table>`;
 }
 
-export type GalleryEmailVariant = 'proofing' | 'finals' | 'files';
+export type GalleryEmailVariant = 'proofing' | 'finals' | 'files' | 'filesReminder';
 
 // The copy each variant sends when the studio doesn't write its own. The
 // share screen prefills its Subject and Message fields from exactly this, so
@@ -199,6 +199,22 @@ export const GALLERY_EMAIL_DEFAULTS: Record<
     subject: 'Files from method26',
     heading: 'Here are your files',
     body: 'Hi there,\n\nHere are the files, ready to download. Click the button below to get them.\n\nBest,\nmethod26',
+    cta: 'Download files',
+  },
+  // Sent once, the day before a transfer expires, and only when nobody has
+  // downloaded it. The wording assumes the first email was missed rather than
+  // ignored — a link buried under a week of mail is the ordinary case, and a
+  // reminder that sounds like chasing reads badly when the recipient is a
+  // client. It says what is about to happen and leaves the door open.
+  filesReminder: {
+    label: 'Expiry reminder',
+    subject: 'Your files expire tomorrow',
+    heading: 'Your files expire tomorrow',
+    body:
+      'Hi there,\n\nThe files sent earlier have not been downloaded yet, and the ' +
+      'link stops working tomorrow. Click the button below to get them while it ' +
+      'is still live.\n\nIf the link has already expired by the time you read ' +
+      'this, reply and we will send a fresh one.\n\nBest,\nmethod26',
     cta: 'Download files',
   },
 };

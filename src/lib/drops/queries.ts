@@ -151,3 +151,99 @@ export async function deleteDrop(id: string): Promise<void> {
   // The B2 objects behind these rows are left in place — this app holds only
   // signed PUT/GET for the bucket, the same trade deletePhotos documents.
 }
+
+/** A transfer whose link is about to stop working, with who was told about it. */
+export type ReminderCandidate = {
+  id: string;
+  token: string;
+  title: string | null;
+  message: string | null;
+  expires_at: string;
+  fileCount: number;
+  recipients: string[];
+};
+
+/**
+ * Transfers that expire soon, nobody has collected, and nobody has been
+ * reminded about.
+ *
+ * The window is 36 hours rather than 24 because the job runs once a day: a
+ * 24-hour window would miss any transfer expiring in the gap between two
+ * runs, and would do so silently. 36 hours guarantees every expiry is seen at
+ * least once, and `reminder_sent_at` is what stops it being seen twice.
+ *
+ * Recipients come from what was actually delivered — `drop_emails` rows with
+ * status 'sent' — not from anything typed into the form. A reminder is only
+ * ever sent to an address that already received the original link, so this
+ * job can never introduce a new recipient.
+ */
+export async function listDropsNeedingReminder(now = new Date()): Promise<ReminderCandidate[]> {
+  const horizon = new Date(now.getTime() + 36 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await createAdminClient()
+    .from('file_drops')
+    .select(
+      'id,token,title,message,expires_at,reminder_sent_at,' +
+        'drop_files(id),drop_downloads(id),drop_emails(recipient,status,sent_at)'
+    )
+    .is('reminder_sent_at', null)
+    .not('expires_at', 'is', null)
+    .gt('expires_at', now.toISOString())
+    .lte('expires_at', horizon);
+  if (error) throw new Error(`listDropsNeedingReminder: ${error.message}`);
+
+  // Don't remind about a transfer sent a few hours ago. A one-day expiry puts
+  // a drop inside the window the moment it is created, and "your files expire
+  // tomorrow" arriving the same afternoon as "here are your files" reads as a
+  // broken system, not a helpful nudge.
+  const quietPeriodMs = 12 * 60 * 60 * 1000;
+
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    token: string;
+    title: string | null;
+    message: string | null;
+    expires_at: string;
+    drop_files: { id: string }[];
+    drop_downloads: { id: string }[];
+    drop_emails: { recipient: string; status: string; sent_at: string }[];
+  }[];
+
+  return rows
+    .filter((row) => row.drop_downloads.length === 0)
+    .filter((row) => row.drop_files.length > 0)
+    .map((row) => {
+      const delivered = row.drop_emails.filter((e) => e.status === 'sent');
+      const newest = delivered.reduce<string | null>(
+        (latest, e) => (latest === null || e.sent_at > latest ? e.sent_at : latest),
+        null
+      );
+      const settled = newest !== null && now.getTime() - new Date(newest).getTime() > quietPeriodMs;
+      return {
+        id: row.id,
+        token: row.token,
+        title: row.title,
+        message: row.message,
+        expires_at: row.expires_at,
+        fileCount: row.drop_files.length,
+        // Deduplicated: the studio may have sent the same link twice, and the
+        // recipient should not get the reminder twice for it.
+        recipients: settled ? [...new Set(delivered.map((e) => e.recipient))] : [],
+      };
+    })
+    .filter((row) => row.recipients.length > 0);
+}
+
+/**
+ * Marks a transfer as reminded.
+ *
+ * Written whether or not every recipient's mail succeeded. A provider failure
+ * is recorded per recipient in `drop_emails`; retrying the whole transfer the
+ * next morning would re-mail everyone who did receive it.
+ */
+export async function markReminderSent(id: string): Promise<void> {
+  const { error } = await createAdminClient()
+    .from('file_drops')
+    .update({ reminder_sent_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw new Error(`markReminderSent: ${error.message}`);
+}

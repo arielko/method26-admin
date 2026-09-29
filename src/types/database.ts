@@ -176,6 +176,7 @@ export type Database = {
           expires_at: string | null
           id: string
           message: string | null
+          reminder_sent_at: string | null
           title: string | null
           token: string
         }
@@ -184,6 +185,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           message?: string | null
+          reminder_sent_at?: string | null
           title?: string | null
           token: string
         }
@@ -192,6 +194,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           message?: string | null
+          reminder_sent_at?: string | null
           title?: string | null
           token?: string
         }

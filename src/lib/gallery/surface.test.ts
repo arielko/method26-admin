@@ -38,6 +38,12 @@ test('every remaining API route authenticates itself and enforces the result', (
   // requires the actual call-and-guard idiom: a variable assigned from
   // `await authenticateSession(...)`, then an `if (!<that variable>.authenticated)`
   // branch that returns `unauthorizedResponse(...)`.
+  // Routes a machine calls, not a person. They cannot use session auth —
+  // there is no session — so they are listed here by name and checked against
+  // their own idiom below. The list is exact: a new unprotected route does not
+  // get to claim this exemption by accident, it has to be added deliberately.
+  const machineRoutes = ['src/app/api/drops/reminders/route.ts'];
+
   const unprotected: string[] = [];
   function walk(dir: string) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -64,11 +70,27 @@ test('every remaining API route authenticates itself and enforces the result', (
         new RegExp(`if\\s*\\(\\s*!${assignment[1]}\\.authenticated\\s*\\)\\s*return\\s+unauthorizedResponse\\(`).test(
           source
         );
-      if (!guarded) unprotected.push(full);
+      if (!guarded && !machineRoutes.includes(full)) unprotected.push(full);
     }
   }
   if (existsSync('src/app/api')) walk('src/app/api');
   assert.deepEqual(unprotected, [], `routes that don't call-and-guard on auth: ${unprotected.join(', ')}`);
+
+  // The exemption above is only safe if the exempted routes are in fact
+  // protected. Each must refuse when its secret is unset — an unset secret
+  // turning a route into an open mailer is the failure this guards — and must
+  // compare in constant time, because a route reachable by anyone on the
+  // internet is a route anyone can time.
+  for (const route of machineRoutes) {
+    const source = readFileSync(route, 'utf8')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    assert.match(source, /process\.env\.REMINDER_SECRET/, `${route} must read its shared secret`);
+    assert.match(source, /status:\s*503/, `${route} must refuse when the secret is unset`);
+    assert.match(source, /timingSafeEqual\(/, `${route} must compare the secret in constant time`);
+    assert.match(source, /status:\s*401/, `${route} must reject a wrong secret`);
+  }
 });
 
 test('the collections and folders routes authenticate themselves', () => {
