@@ -44,6 +44,7 @@ test('every remaining API route authenticates itself and enforces the result', (
   // get to claim this exemption by accident, it has to be added deliberately.
   const machineRoutes = [
     'src/app/api/drops/reminders/route.ts',
+    'src/app/api/drops/purge/route.ts',
     'src/app/api/backup/route.ts',
   ];
 

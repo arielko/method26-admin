@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
-import { createDrop, listDrops, deleteDrop, updateDrop, dropExists } from '@/lib/drops/queries';
+import { createDrop, listDrops, deleteDrop, updateDrop, dropExists, listDropFiles } from '@/lib/drops/queries';
+import { purgeDrop } from '@/lib/drops/purge';
+import { deleteObject } from '@/lib/drops/r2';
 
 // A transfer is created empty and filled by the upload, so the browser has a
 // drop id to derive keys from before the first byte moves.
@@ -102,6 +104,17 @@ export async function DELETE(request: NextRequest) {
   const id = typeof body.id === 'string' ? body.id : '';
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-  await deleteDrop(id);
+  // Files first, then rows. Deleting only the rows would leave the bytes in the
+  // bucket with nothing left to say whose they are.
+  try {
+    const files = await listDropFiles(id);
+    await purgeDrop({ deleteObject, deleteRow: deleteDrop }, { id, keys: files.map((f) => f.object_key) });
+  } catch (caught) {
+    console.error('delete drop failed', caught);
+    return NextResponse.json(
+      { error: 'Could not delete the files from storage. The transfer was kept; try again.' },
+      { status: 502 }
+    );
+  }
   return NextResponse.json({ ok: true });
 }

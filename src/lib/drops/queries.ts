@@ -145,11 +145,32 @@ export async function recordDropEmail(row: {
   if (error) console.error('recordDropEmail failed', error.message);
 }
 
+/**
+ * Deletes the database rows only (files, downloads and email log cascade).
+ * The objects in R2 are NOT touched here; use purgeDrop in ./purge.ts, which
+ * deletes the bytes first so the rows that name them are never lost early.
+ */
 export async function deleteDrop(id: string): Promise<void> {
   const { error } = await createAdminClient().from('file_drops').delete().eq('id', id);
   if (error) throw new Error(`deleteDrop: ${error.message}`);
-  // The B2 objects behind these rows are left in place — this app holds only
-  // signed PUT/GET for the bucket, the same trade deletePhotos documents.
+}
+
+/**
+ * Transfers whose link has already stopped working, with the object keys that
+ * still need deleting from R2. A transfer with no expiry never appears here.
+ * Oldest first, so a backlog drains in the order it built up.
+ */
+export async function listExpiredDrops(now = new Date()): Promise<{ id: string; keys: string[] }[]> {
+  const { data, error } = await createAdminClient()
+    .from('file_drops')
+    .select('id,expires_at,drop_files(object_key)')
+    .not('expires_at', 'is', null)
+    .lte('expires_at', now.toISOString())
+    .order('expires_at', { ascending: true });
+  if (error) throw new Error(`listExpiredDrops: ${error.message}`);
+
+  const rows = (data ?? []) as unknown as { id: string; drop_files: { object_key: string }[] }[];
+  return rows.map((row) => ({ id: row.id, keys: row.drop_files.map((f) => f.object_key) }));
 }
 
 /** A transfer whose link is about to stop working, with who was told about it. */

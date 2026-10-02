@@ -199,3 +199,17 @@ export async function presignPut(key: string, contentType: string, expiresIn = 3
 
   return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
+
+/**
+ * Deletes one object. A key that is already gone counts as success: S3
+ * answers 204 for it, and the purge relies on that to be safely re-runnable
+ * after a partial failure. Anything else throws, so the caller keeps the
+ * database row that says which keys still need deleting.
+ */
+export async function deleteObject(key: string): Promise<void> {
+  const url = await presign('DELETE', key, {}, 300);
+  const response = await fetch(url, { method: 'DELETE' });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete of ${key} failed: HTTP ${response.status}`);
+  }
+}
