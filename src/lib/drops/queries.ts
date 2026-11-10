@@ -146,6 +146,27 @@ export async function recordDropEmail(row: {
 }
 
 /**
+ * Remembers an address so it can be offered again. Unlike drop_emails this
+ * survives the transfer being purged. Like it, failing here must never be
+ * the reason a send looks like it failed.
+ */
+export async function recordTransferContact(email: string): Promise<void> {
+  const { error } = await createAdminClient().rpc('record_transfer_contact', { p_email: email });
+  if (error) console.error('recordTransferContact failed', error.message);
+}
+
+/** Addresses sent to before, most recent first. */
+export async function listTransferContacts(limit = 500): Promise<{ email: string; send_count: number }[]> {
+  const { data, error } = await createAdminClient()
+    .from('transfer_contacts')
+    .select('email,send_count')
+    .order('last_sent_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`listTransferContacts: ${error.message}`);
+  return data ?? [];
+}
+
+/**
  * Deletes the database rows only (files, downloads and email log cascade).
  * The objects in R2 are NOT touched here; use purgeDrop in ./purge.ts, which
  * deletes the bytes first so the rows that name them are never lost early.

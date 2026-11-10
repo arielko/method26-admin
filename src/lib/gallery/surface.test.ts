@@ -219,7 +219,10 @@ test('every table in the schema is in the backup, or deliberately not', () => {
   // every backup, and nobody would find out until a restore. Discovering the
   // schema from the generated types means adding a table breaks this test on
   // the same commit that adds it.
-  const types = readFileSync('src/types/database.ts', 'utf8');
+  const allTypes = readFileSync('src/types/database.ts', 'utf8');
+  // Only the Tables block: Functions and Enums sit at the same indent and
+  // would otherwise be mistaken for tables.
+  const types = allTypes.slice(allTypes.indexOf('    Tables: {'), allTypes.indexOf('    Views: {'));
   const schema = types
     .split('\n')
     .map((line) => line.match(/^ {6}([a-z_]+): \{$/))

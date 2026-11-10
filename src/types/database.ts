@@ -129,6 +129,27 @@ export type Database = {
           },
         ]
       }
+      transfer_contacts: {
+        Row: {
+          email: string
+          first_sent_at: string
+          last_sent_at: string
+          send_count: number
+        }
+        Insert: {
+          email: string
+          first_sent_at?: string
+          last_sent_at?: string
+          send_count?: number
+        }
+        Update: {
+          email?: string
+          first_sent_at?: string
+          last_sent_at?: string
+          send_count?: number
+        }
+        Relationships: []
+      }
       drop_files: {
         Row: {
           content_type: string
@@ -594,7 +615,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      record_transfer_contact: {
+        Args: { p_email: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

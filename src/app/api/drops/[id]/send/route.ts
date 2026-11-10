@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateSession, unauthorizedResponse } from '@/lib/api/auth';
-import { getDrop, listDropFiles, recordDropEmail } from '@/lib/drops/queries';
+import { getDrop, listDropFiles, recordDropEmail, recordTransferContact } from '@/lib/drops/queries';
 import { sendGalleryEmail } from '@/lib/gallery/mail';
 import { normalizeRecipients, isValidRecipient } from '@/lib/gallery/send';
 import { GALLERY_EMAIL_DEFAULTS } from '@/lib/gallery/email-templates';
@@ -44,6 +44,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (invalid.length > 0) {
     return NextResponse.json({ error: `Not a valid email address: ${invalid.join(', ')}` }, { status: 400 });
   }
+
+  // Recorded before sending, not after: an address the studio typed is worth
+  // remembering even if the provider rejects this attempt.
+  await Promise.all(recipients.map((email) => recordTransferContact(email)));
 
   const subject = drop.title?.trim()
     ? `${drop.title.trim()} — method26`

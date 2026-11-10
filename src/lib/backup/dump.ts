@@ -24,6 +24,7 @@ export const BACKUP_TABLES = [
   'file_drops',
   'drop_files',
   'drop_emails',
+  'transfer_contacts',
   'drop_downloads',
 ] as const;
 

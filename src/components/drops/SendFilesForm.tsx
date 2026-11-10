@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, X, Check, Copy, Send } from 'lucide-react';
 import { uploadDropFiles, type DropUploadProgress } from '@/lib/drops/upload';
 
@@ -44,6 +44,16 @@ export function SendFilesForm() {
   const [dropId, setDropId] = useState<string | null>(null);
   const [files, setFiles] = useState<{ id: string; filename: string; file_size_bytes: number }[]>([]);
   const [progress, setProgress] = useState<DropUploadProgress | null>(null);
+
+  // Everyone sent to before, most recent first. A failed fetch just means no
+  // suggestions; it must never get in the way of sending.
+  const [contacts, setContacts] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/drops/contacts')
+      .then((r) => (r.ok ? r.json() : { contacts: [] }))
+      .then((d: { contacts?: { email: string }[] }) => setContacts((d.contacts ?? []).map((c) => c.email)))
+      .catch(() => {});
+  }, []);
 
   const [recipients, setRecipients] = useState<string[]>([]);
   const [entry, setEntry] = useState('');
@@ -294,11 +304,38 @@ export function SendFilesForm() {
               }
             }}
             onBlur={addEntry}
+            list="transfer-contacts"
             placeholder={recipients.length === 0 ? 'name@example.com' : ''}
             className="min-w-[140px] flex-1 border-0 bg-transparent text-[14px] text-ink outline-none"
           />
+          <datalist id="transfer-contacts">
+            {contacts
+              .filter((email) => !recipients.includes(email))
+              .map((email) => (
+                <option key={email} value={email} />
+              ))}
+          </datalist>
         </div>
       </label>
+
+      {contacts.some((email) => !recipients.includes(email)) && (
+        <div className="-mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] uppercase tracking-wide text-ink/70">Recent</span>
+          {contacts
+            .filter((email) => !recipients.includes(email))
+            .slice(0, 6)
+            .map((email) => (
+              <button
+                key={email}
+                type="button"
+                onClick={() => setRecipients((c) => (c.includes(email) ? c : [...c, email]))}
+                className="border border-stone bg-paper px-2 py-1 text-[12px] text-ink hover:border-ink"
+              >
+                + {email}
+              </button>
+            ))}
+        </div>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-[11px] uppercase tracking-wide text-ink">Title</span>
